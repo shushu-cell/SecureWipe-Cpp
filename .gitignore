@@ -1,0 +1,10 @@
+# build outputs
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# editor
+.vscode/
+.idea/
