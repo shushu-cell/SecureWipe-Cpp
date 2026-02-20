@@ -1,0 +1,61 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------- Build on Linux ----------
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          g++ --version
+          g++ -std=c++17 -O2 src/main.cpp src/secure_wipe.cpp -Iinclude -o securewipe-linux
+          chmod +x securewipe-linux
+          tar -czf securewipe-linux.tar.gz securewipe-linux
+
+      # ---------- Build on macOS ----------
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          clang++ --version
+          clang++ -std=c++17 -O2 src/main.cpp src/secure_wipe.cpp -Iinclude -o securewipe-macos
+          chmod +x securewipe-macos
+          zip -9 securewipe-macos.zip securewipe-macos
+
+      # ---------- Build on Windows ----------
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /?
+          # Use MSVC compiler (cl). /EHsc enables standard C++ exceptions. /O2 optimizes.
+          cl /std:c++17 /O2 /EHsc /I include src\main.cpp src\secure_wipe.cpp /Fe:securewipe.exe
+          Compress-Archive -Path securewipe.exe -DestinationPath securewipe-windows.zip -Force
+
+      # ---------- Upload to GitHub Release ----------
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            securewipe-windows.zip
+            securewipe-macos.zip
+            securewipe-linux.tar.gz
