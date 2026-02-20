@@ -42,15 +42,18 @@ jobs:
           zip -9 securewipe-macos.zip securewipe-macos
 
       # ---------- Build on Windows ----------
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cl /?
-          # Use MSVC compiler (cl). /EHsc enables standard C++ exceptions. /O2 optimizes.
           cl /std:c++17 /O2 /EHsc /I include src\main.cpp src\secure_wipe.cpp /Fe:securewipe.exe
           Compress-Archive -Path securewipe.exe -DestinationPath securewipe-windows.zip -Force
-
+          
       # ---------- Upload to GitHub Release ----------
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
