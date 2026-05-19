@@ -1,4 +1,4 @@
-#include "cli_application.h"
+#include "internal/cli_application.h"
 
 #include <charconv>
 #include <ostream>

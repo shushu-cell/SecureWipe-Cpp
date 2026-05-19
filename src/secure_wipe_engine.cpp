@@ -1,4 +1,4 @@
-#include "secure_wipe_engine.h"
+#include "internal/secure_wipe_engine.h"
 
 #include <algorithm>
 #include <cerrno>
