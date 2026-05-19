@@ -60,6 +60,15 @@ void test_inspect_regular_file() {
     require(!report.warnings.empty(), "inspect_target should surface media or filesystem caveats");
 }
 
+void test_inspect_missing_path() {
+    TempDir temp;
+    const auto report = securewipe::inspect_target((temp.path() / "missing.txt").string());
+    require(!report.ok, "inspect_target should fail for a missing path");
+    require(report.target_kind == securewipe::TargetKind::Missing,
+            "missing paths should keep the default target kind");
+    require(report.message == "Path does not exist", "missing path message should be explicit");
+}
+
 void test_wipe_file_removes_target() {
     TempDir temp;
     const fs::path file = temp.path() / "erase-me.bin";
@@ -74,6 +83,20 @@ void test_wipe_file_removes_target() {
     require(result.ok, "wipe_file should succeed for a temporary file");
     require(!fs::exists(file), "wipe_file should remove the target file");
     require(result.files_wiped == 1, "wipe_file should report one wiped file");
+}
+
+void test_wipe_file_rejects_zero_block_size() {
+    TempDir temp;
+    const fs::path file = temp.path() / "invalid.bin";
+    write_text_file(file, "payload");
+
+    securewipe::WipeOptions options;
+    options.block_size = 0;
+
+    const auto result = securewipe::wipe_file(file.string(), options);
+    require(!result.ok, "wipe_file should reject zero-sized blocks");
+    require(result.message == "block_size must be >= 1", "invalid block size should be explained");
+    require(fs::exists(file), "wipe_file should leave the file intact on invalid options");
 }
 
 void test_wipe_directory_dry_run_preserves_files() {
@@ -92,6 +115,38 @@ void test_wipe_directory_dry_run_preserves_files() {
     require(fs::exists(dir / "nested" / "child.txt"), "dry-run must preserve nested files");
 }
 
+void test_wipe_directory_requires_confirmation() {
+    TempDir temp;
+    const fs::path dir = temp.path() / "folder";
+    fs::create_directories(dir);
+    write_text_file(dir / "root.txt", "alpha");
+
+    securewipe::WipeOptions options;
+    const auto result = securewipe::wipe_directory(dir.string(), options, false, false);
+    require(!result.ok, "wipe_directory should require confirmation before execution");
+    require(result.message.find("requires --dry-run") != std::string::npos,
+            "wipe_directory should explain the confirmation requirement");
+    require(fs::exists(dir / "root.txt"), "wipe_directory should not delete files without confirmation");
+}
+
+void test_wipe_directory_executes_when_confirmed() {
+    TempDir temp;
+    const fs::path dir = temp.path() / "folder";
+    fs::create_directories(dir / "nested");
+    write_text_file(dir / "root.txt", "alpha");
+    write_text_file(dir / "nested" / "child.txt", "beta");
+
+    securewipe::WipeOptions options;
+    options.block_size = 64;
+
+    const auto result = securewipe::wipe_directory(dir.string(), options, false, true);
+    require(result.ok, "wipe_directory should succeed after confirmation");
+    require(result.files_total == 2, "wipe_directory should count the files it processed");
+    require(result.files_wiped == 2, "wipe_directory should report both files as wiped");
+    require(!fs::exists(dir / "root.txt"), "confirmed wipe_directory should remove the root file");
+    require(!fs::exists(dir / "nested" / "child.txt"), "confirmed wipe_directory should remove nested files");
+}
+
 void test_dangerous_root_is_refused() {
     const fs::path root = fs::current_path().root_path();
     const auto report = securewipe::inspect_target(root.string());
@@ -108,8 +163,12 @@ void test_dangerous_root_is_refused() {
 int main() {
     try {
         test_inspect_regular_file();
+        test_inspect_missing_path();
         test_wipe_file_removes_target();
+        test_wipe_file_rejects_zero_block_size();
         test_wipe_directory_dry_run_preserves_files();
+        test_wipe_directory_requires_confirmation();
+        test_wipe_directory_executes_when_confirmed();
         test_dangerous_root_is_refused();
         std::cout << "All tests passed.\n";
         return 0;

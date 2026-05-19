@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(securewipe_lib STATIC
 	src/secure_wipe.cpp
+	src/secure_wipe_engine.cpp
 )
 
 target_include_directories(securewipe_lib
@@ -27,6 +28,7 @@ else()
 endif()
 
 add_executable(securewipe
+	src/cli_application.cpp
 	src/main.cpp
 )
 

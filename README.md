@@ -12,6 +12,22 @@ SecureWipe-Cpp 是一个以 C++ 实现的安全擦除 CLI 原型，目标不是�
 - 拒绝符号链接与危险目录，避免目录逃逸和明显的误删场景。
 - 通过 CMake 和 CTest 提供统一的构建与测试入口。
 
+## 架构设计
+
+当前实现围绕稳定外观层与可替换内部对象协作展开，尽量保持公共 API 简洁，同时把平台分支、擦除策略和 CLI 表现层拆开。
+
+- `include/secure_wipe.h` 保持稳定的公共 API，避免 CLI 与内部实现细节直接耦合。
+- `src/secure_wipe.cpp` 只保留外观职责，把调用转发到内部引擎对象。
+- `src/secure_wipe_engine.*` 承担核心领域逻辑，并把职责拆为 `PathInspector`、`NativeFile`、`FileWiper`、`DirectoryWiper` 与 `SecureWipeFacade`。
+- `src/cli_application.*` 负责命令解析、参数校验、帮助输出与结果呈现，使 CLI 不再与底层擦除逻辑混写在 `main` 中。
+
+这个分层遵循的原则是：
+
+- 单一职责：检查、文件擦除、目录遍历、CLI 解析分别由独立对象承担。
+- 资源即对象：文件句柄通过 `NativeFile` 以 RAII 方式管理，减少手工 `fclose` 分支。
+- 稳定接口、可替换实现：公共 API 不因内部重构而变化，便于后续扩展设备级 sanitize。
+- 值类型优先：`InspectionReport`、`WipeResult`、`WipeOptions` 等继续作为清晰的数据边界。
+
 ## 安全边界
 
 - 当前实现只覆盖文件和目录路径，不直接执行 ATA Secure Erase、NVMe Sanitize、PSID revert 等设备级 destructive 操作。
@@ -77,8 +93,10 @@ securewipe wipe-dir ./scratch --passes 1 --pattern random --yes
 
 ```text
 include/secure_wipe.h   公共 API
-src/main.cpp            CLI 入口
-src/secure_wipe.cpp     检查与擦除核心实现
+src/main.cpp            最小入口，只负责启动 CLI 应用对象
+src/cli_application.*   CLI 应用层与参数解析
+src/secure_wipe.cpp     公共 API 外观层
+src/secure_wipe_engine.* 内部检查与擦除引擎
 tests/                  CTest 测试
 refs/                   研究与需求背景
 ai/plan.md              实施计划
