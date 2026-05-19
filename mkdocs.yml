@@ -1,0 +1,45 @@
+site_name: SecureWipe-Cpp
+site_description: SecureWipe-Cpp project documentation
+repo_name: shushu-cell/SecureWipe-Cpp
+repo_url: https://github.com/shushu-cell/SecureWipe-Cpp
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - 首页: index.md
+  - 使用指南:
+      - CLI 使用: guide/cli.md
+      - 安全边界: guide/safety.md
+  - 工程文档:
+      - 架构设计: engineering/architecture.md
+      - 公共 API: engineering/api.md
+      - 开发指南: engineering/development.md
+      - 文档维护: engineering/docs-maintenance.md

@@ -1,6 +1,7 @@
 # build outputs
 build/
 dist/
+site/
 
 # macOS
 .DS_Store
