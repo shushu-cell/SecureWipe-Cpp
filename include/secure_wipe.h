@@ -1,6 +1,8 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace securewipe {
 
@@ -15,11 +17,53 @@ struct WipeOptions {
     std::size_t block_size = 1 << 20; // 1 MiB
 };
 
+enum class TargetKind {
+    Missing,
+    RegularFile,
+    Directory,
+    Symlink,
+    Other
+};
+
+enum class StorageKind {
+    Unknown,
+    FixedDisk,
+    RotationalDisk,
+    SolidState,
+    RemovableDisk,
+    NetworkShare
+};
+
+enum class StrategyRecommendation {
+    None,
+    Refuse,
+    BestEffortFileOverwrite,
+    BestEffortDirectoryWipe,
+    ReviewBeforeWipe
+};
+
 struct WipeResult {
     bool ok = false;
+    bool dry_run = false;
+    std::uint64_t files_total = 0;
+    std::uint64_t files_wiped = 0;
+    std::uint64_t files_failed = 0;
     std::string message;  // error or info
 };
 
+struct InspectionReport {
+    bool ok = false;
+    bool dangerous = false;
+    TargetKind target_kind = TargetKind::Missing;
+    StorageKind storage_kind = StorageKind::Unknown;
+    StrategyRecommendation recommendation = StrategyRecommendation::None;
+    std::string canonical_path;
+    std::string volume_name;
+    std::string message;
+    std::vector<std::string> warnings;
+};
+
+InspectionReport inspect_target(const std::string& path);
 WipeResult wipe_file(const std::string& path, const WipeOptions& opt);
 WipeResult wipe_directory(const std::string& dir, const WipeOptions& opt, bool dry_run, bool yes);
 } // namespace securewipe
