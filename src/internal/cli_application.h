@@ -41,17 +41,13 @@ private:
         bool ok = false;
         ExitCode exit_code = ExitCode::Success;
         std::string error_message;
+        std::string help_text;
         CommandRequest request;
     };
 
     [[nodiscard]] static ParseResult parse(const std::vector<std::string>& args);
-    [[nodiscard]] static ParseResult make_parse_success(CommandRequest request);
-    [[nodiscard]] static ParseResult make_parse_error(std::string message);
     [[nodiscard]] static int to_exit_code(ExitCode exit_code) noexcept;
-    static void print_help(std::ostream& output);
     static void write_field(std::ostream& output, std::string_view key, std::string_view value);
-    static bool try_parse_positive_int(std::string_view text, int& value);
-    static bool try_parse_pattern(std::string_view text, Pattern& pattern);
     [[nodiscard]] static std::string_view to_string(TargetKind kind) noexcept;
     [[nodiscard]] static std::string_view to_string(StorageKind kind) noexcept;
     [[nodiscard]] static std::string_view to_string(StrategyRecommendation recommendation) noexcept;

@@ -1,10 +1,14 @@
 #include "internal/cli_application.h"
 
+#include <CLI/CLI.hpp>
+
 #include <array>
-#include <charconv>
+#include <map>
 #include <ostream>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace securewipe::app {
 
@@ -56,6 +60,46 @@ constexpr std::array<EnumLabel<StrategyRecommendation>, 5> kRecommendationLabels
     {StrategyRecommendation::ReviewBeforeWipe, "review-before-wipe"sv},
 }};
 
+const std::map<std::string, Pattern> kPatternOptions{
+    {"zeros", Pattern::Zeros},
+    {"random", Pattern::Random},
+};
+
+constexpr std::string_view kCliFooter = R"(Examples:
+  securewipe inspect test.txt
+  securewipe wipe test.txt --passes 1 --pattern zeros
+  securewipe wipe-dir ./tmp --dry-run
+  securewipe wipe-dir ./tmp --passes 1 --pattern zeros --yes
+)";
+
+void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOptions& options) {
+    command.add_option("path", path, "Target path")->required();
+    command.add_option("--passes", options.passes, "Overwrite pass count")
+        ->check(CLI::PositiveNumber)
+        ->default_val(options.passes);
+    command.add_option("--pattern", options.pattern, "Overwrite pattern")
+        ->transform(CLI::CheckedTransformer(kPatternOptions))
+        ->default_str("zeros");
+}
+
+std::string select_help(
+    const CLI::App& app,
+    const CLI::App& inspect_command,
+    const CLI::App& wipe_command,
+    const CLI::App& wipe_directory_command) {
+    if (inspect_command.parsed()) {
+        return inspect_command.help();
+    }
+    if (wipe_command.parsed()) {
+        return wipe_command.help();
+    }
+    if (wipe_directory_command.parsed()) {
+        return wipe_directory_command.help();
+    }
+
+    return app.help();
+}
+
 } // namespace
 
 CommandLineApplication::CommandLineApplication(std::ostream& output, std::ostream& error_output)
@@ -68,13 +112,15 @@ int CommandLineApplication::run(const std::vector<std::string>& args) const {
         if (!parse_result.error_message.empty()) {
             error_output_ << parse_result.error_message << "\n\n";
         }
-        print_help(error_output_);
+        if (!parse_result.help_text.empty()) {
+            error_output_ << parse_result.help_text;
+        }
         return to_exit_code(parse_result.exit_code);
     }
 
     switch (parse_result.request.kind) {
     case CommandKind::Help:
-        print_help(output_);
+        output_ << parse_result.help_text;
         return to_exit_code(ExitCode::Success);
     case CommandKind::Inspect:
         return run_inspect(parse_result.request);
@@ -89,99 +135,62 @@ int CommandLineApplication::run(const std::vector<std::string>& args) const {
 }
 
 CommandLineApplication::ParseResult CommandLineApplication::parse(const std::vector<std::string>& args) {
-    if (args.empty()) {
-        return make_parse_success(CommandRequest{});
-    }
-
-    const std::string_view command = args[0];
-    if (command == "--help"sv || command == "-h"sv) {
-        return make_parse_success(CommandRequest{});
-    }
-
-    if (command == "inspect"sv) {
-        if (args.size() != 2) {
-            return make_parse_error("Error: inspect requires exactly one <path> argument");
-        }
-
-        CommandRequest request;
-        request.kind = CommandKind::Inspect;
-        request.path = args[1];
-        return make_parse_success(std::move(request));
-    }
-
-    if (command != "wipe"sv && command != "wipe-dir"sv) {
-        return make_parse_error("Unknown command: " + std::string(command));
-    }
-
-    if (args.size() < 2) {
-        return make_parse_error("Error: missing <path>");
-    }
-
-    CommandRequest request;
-    request.kind = command == "wipe"sv ? CommandKind::WipeFile : CommandKind::WipeDirectory;
-    request.path = args[1];
-
-    for (std::size_t index = 2; index < args.size(); ++index) {
-        const std::string_view option = args[index];
-        if (option == "--passes"sv) {
-            if (index + 1 >= args.size()) {
-                return make_parse_error("Error: --passes requires a positive integer value");
-            }
-
-            int passes = 0;
-            if (!try_parse_positive_int(args[index + 1], passes)) {
-                return make_parse_error("Error: --passes requires a positive integer value");
-            }
-
-            request.options.passes = passes;
-            ++index;
-            continue;
-        }
-
-        if (option == "--pattern"sv) {
-            if (index + 1 >= args.size()) {
-                return make_parse_error("Error: --pattern requires one of zeros|random");
-            }
-
-            if (!try_parse_pattern(args[index + 1], request.options.pattern)) {
-                return make_parse_error("Error: unknown pattern: " + args[index + 1]);
-            }
-
-            ++index;
-            continue;
-        }
-
-        if (option == "--dry-run"sv) {
-            request.dry_run = true;
-            continue;
-        }
-
-        if (option == "--yes"sv) {
-            request.yes = true;
-            continue;
-        }
-
-        return make_parse_error("Error: unknown option: " + std::string(option));
-    }
-
-    if (request.kind == CommandKind::WipeFile && (request.dry_run || request.yes)) {
-        return make_parse_error("Error: --dry-run and --yes are only valid with wipe-dir");
-    }
-
-    return make_parse_success(std::move(request));
-}
-
-CommandLineApplication::ParseResult CommandLineApplication::make_parse_success(CommandRequest request) {
     ParseResult result;
+    CommandRequest request;
+
+    CLI::App app{"SecureWipe-Cpp"};
+    app.name("securewipe");
+    app.footer(std::string(kCliFooter));
+    app.require_subcommand(0, 1);
+
+    auto* inspect_command = app.add_subcommand("inspect", "Inspect a target and report the recommended wipe strategy.");
+    inspect_command->add_option("path", request.path, "Target path")->required();
+
+    auto* wipe_command = app.add_subcommand("wipe", "Best-effort wipe of a single file.");
+    configure_shared_wipe_options(*wipe_command, request.path, request.options);
+
+    auto* wipe_directory_command = app.add_subcommand("wipe-dir", "Best-effort recursive wipe of a directory.");
+    configure_shared_wipe_options(*wipe_directory_command, request.path, request.options);
+    wipe_directory_command->add_flag("--dry-run", request.dry_run, "List files without deleting them");
+    wipe_directory_command->add_flag("--yes", request.yes, "Confirm destructive directory wipe");
+
+    if (args.empty()) {
+        result.ok = true;
+        result.request.kind = CommandKind::Help;
+        result.help_text = app.help();
+        return result;
+    }
+
+    try {
+        std::vector<std::string> parse_args(args.rbegin(), args.rend());
+        app.parse(parse_args);
+    } catch (const CLI::ParseError& error) {
+        if (error.get_exit_code() == 0) {
+            result.ok = true;
+            result.request.kind = CommandKind::Help;
+            result.help_text = select_help(app, *inspect_command, *wipe_command, *wipe_directory_command);
+            return result;
+        }
+
+        result.exit_code = ExitCode::Rejected;
+        result.error_message = error.what();
+        result.help_text = select_help(app, *inspect_command, *wipe_command, *wipe_directory_command);
+        return result;
+    }
+
     result.ok = true;
     result.request = std::move(request);
-    return result;
-}
+    if (inspect_command->parsed()) {
+        result.request.kind = CommandKind::Inspect;
+    } else if (wipe_command->parsed()) {
+        result.request.kind = CommandKind::WipeFile;
+    } else if (wipe_directory_command->parsed()) {
+        result.request.kind = CommandKind::WipeDirectory;
+    } else {
+        result.request.kind = CommandKind::Help;
+        result.help_text = app.help();
+    }
 
-CommandLineApplication::ParseResult CommandLineApplication::make_parse_error(std::string message) {
-    ParseResult result;
-    result.exit_code = ExitCode::Rejected;
-    result.error_message = std::move(message);
     return result;
 }
 
@@ -189,45 +198,8 @@ int CommandLineApplication::to_exit_code(ExitCode exit_code) noexcept {
     return static_cast<int>(exit_code);
 }
 
-void CommandLineApplication::print_help(std::ostream& output) {
-    output <<
-R"(SecureWipe-Cpp
-
-Usage:
-  securewipe --help
-  securewipe inspect <path>
-  securewipe wipe <path> [--passes N] [--pattern zeros|random]
-  securewipe wipe-dir <dir> [--passes N] [--pattern zeros|random] [--dry-run] [--yes]
-
-Examples:
-  securewipe inspect test.txt
-  securewipe wipe test.txt --passes 1 --pattern zeros
-  securewipe wipe-dir ./tmp --dry-run
-  securewipe wipe-dir ./tmp --passes 1 --pattern zeros --yes
-)";
-}
-
 void CommandLineApplication::write_field(std::ostream& output, std::string_view key, std::string_view value) {
     output << key << ": " << value << '\n';
-}
-
-bool CommandLineApplication::try_parse_positive_int(std::string_view text, int& value) {
-    const char* begin = text.data();
-    const char* end = text.data() + text.size();
-    const auto [ptr, error] = std::from_chars(begin, end, value);
-    return error == std::errc() && ptr == end && value > 0;
-}
-
-bool CommandLineApplication::try_parse_pattern(std::string_view text, Pattern& pattern) {
-    if (text == "zeros"sv) {
-        pattern = Pattern::Zeros;
-        return true;
-    }
-    if (text == "random"sv) {
-        pattern = Pattern::Random;
-        return true;
-    }
-    return false;
 }
 
 std::string_view CommandLineApplication::to_string(TargetKind kind) noexcept {

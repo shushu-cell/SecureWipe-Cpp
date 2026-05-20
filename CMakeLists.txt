@@ -9,6 +9,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_library(CLI11 INTERFACE)
+add_library(CLI11::CLI11 ALIAS CLI11)
+
+target_include_directories(CLI11 SYSTEM INTERFACE
+	${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 add_library(securewipe_lib STATIC
 	src/directory_wiper.cpp
 	src/file_wiper.cpp
@@ -36,7 +43,7 @@ add_executable(securewipe
 	src/main.cpp
 )
 
-target_link_libraries(securewipe PRIVATE securewipe_lib)
+target_link_libraries(securewipe PRIVATE securewipe_lib CLI11::CLI11)
 
 if(MSVC)
 	target_compile_options(securewipe PRIVATE /W4 /permissive-)

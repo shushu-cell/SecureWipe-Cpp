@@ -73,6 +73,10 @@ bool matches_any(std::string_view value, std::initializer_list<std::string_view>
     return false;
 }
 
+bool contains(std::string_view text, std::string_view needle) {
+    return text.find(needle) != std::string_view::npos;
+}
+
 void test_inspect_regular_file() {
     TempDir temp;
     const fs::path file = temp.path() / "sample.txt";
@@ -95,50 +99,69 @@ void test_inspect_missing_path() {
     require(report.message == "Path does not exist", "missing path message should be explicit");
 }
 
-    void test_cli_inspect_reports_stable_labels() {
-        TempDir temp;
-        const fs::path file = temp.path() / "sample.txt";
-        write_text_file(file, "secret");
+void test_cli_without_arguments_prints_generated_help() {
+    std::ostringstream output;
+    std::ostringstream error_output;
+    securewipe::app::CommandLineApplication application(output, error_output);
 
-        std::ostringstream output;
-        std::ostringstream error_output;
-        securewipe::app::CommandLineApplication application(output, error_output);
+    const int exit_code = application.run({});
+    require(exit_code == 0, "CLI without arguments should print help and succeed");
+    require(error_output.str().empty(), "CLI help should not emit stderr");
 
-        const int exit_code = application.run({"inspect", file.string()});
-        require(exit_code == 0, "CLI inspect should succeed for a regular file");
-        require(error_output.str().empty(), "CLI inspect should not emit stderr on success");
+    const std::string help = output.str();
+        require(contains(help, "securewipe [OPTIONS] [SUBCOMMAND]"),
+            "CLI11 should generate a command synopsis");
+        require(contains(help, "SUBCOMMANDS:"),
+            "CLI11 should generate a subcommand section");
+    require(contains(help, "inspect"), "CLI11 help should list the inspect subcommand");
+    require(contains(help, "wipe-dir"), "CLI11 help should list the wipe-dir subcommand");
+    require(contains(help, "Examples:"), "CLI11 help should include the configured examples footer");
+}
 
-        const std::string report = output.str();
-        require(read_field_value(report, "target-kind") == "regular-file",
+void test_cli_inspect_reports_stable_labels() {
+    TempDir temp;
+    const fs::path file = temp.path() / "sample.txt";
+    write_text_file(file, "secret");
+
+    std::ostringstream output;
+    std::ostringstream error_output;
+    securewipe::app::CommandLineApplication application(output, error_output);
+
+    const int exit_code = application.run({"inspect", file.string()});
+    require(exit_code == 0, "CLI inspect should succeed for a regular file");
+    require(error_output.str().empty(), "CLI inspect should not emit stderr on success");
+
+    const std::string report = output.str();
+    require(read_field_value(report, "target-kind") == "regular-file",
             "CLI inspect should render TargetKind::RegularFile with a stable label");
 
-        const std::string storage_kind = read_field_value(report, "storage-kind");
-        require(matches_any(storage_kind,
-                {"unknown", "fixed-disk", "rotational-disk", "solid-state", "removable-disk", "network-share"}),
+    const std::string storage_kind = read_field_value(report, "storage-kind");
+    require(matches_any(storage_kind,
+                        {"unknown", "fixed-disk", "rotational-disk", "solid-state", "removable-disk", "network-share"}),
             "CLI inspect should render storage kinds using the supported label set");
 
-        const std::string recommendation = read_field_value(report, "recommendation");
-        require(matches_any(recommendation,
-                {"best-effort-file-overwrite", "review-before-wipe", "refuse"}),
+    const std::string recommendation = read_field_value(report, "recommendation");
+    require(matches_any(recommendation,
+                        {"best-effort-file-overwrite", "review-before-wipe", "refuse"}),
             "CLI inspect should render recommendations using the supported label set");
-    }
+}
 
-    void test_cli_inspect_refusal_uses_refuse_label() {
-        std::ostringstream output;
-        std::ostringstream error_output;
-        securewipe::app::CommandLineApplication application(output, error_output);
+void test_cli_inspect_refusal_uses_refuse_label() {
+    std::ostringstream output;
+    std::ostringstream error_output;
+    securewipe::app::CommandLineApplication application(output, error_output);
 
-        const fs::path root = fs::current_path().root_path();
-        const int exit_code = application.run({"inspect", root.string()});
-        require(exit_code == 2, "CLI inspect should reject dangerous root targets");
-        require(error_output.str().empty(), "CLI inspect should print refusal reports to stdout, not stderr");
+    const fs::path root = fs::current_path().root_path();
+    const int exit_code = application.run({"inspect", root.string()});
+    require(exit_code == 2, "CLI inspect should reject dangerous root targets");
+    require(error_output.str().empty(), "CLI inspect should print refusal reports to stdout, not stderr");
 
-        const std::string report = output.str();
-        require(read_field_value(report, "target-kind") == "directory",
+    const std::string report = output.str();
+    require(read_field_value(report, "target-kind") == "directory",
             "CLI inspect should render root paths as directories");
-        require(read_field_value(report, "recommendation") == "refuse",
+    require(read_field_value(report, "recommendation") == "refuse",
             "CLI inspect should render StrategyRecommendation::Refuse with a stable label");
-    }
+}
 
 void test_wipe_file_removes_target() {
     TempDir temp;
@@ -235,6 +258,7 @@ int main() {
     try {
         test_inspect_regular_file();
         test_inspect_missing_path();
+        test_cli_without_arguments_prints_generated_help();
         test_cli_inspect_reports_stable_labels();
         test_cli_inspect_refusal_uses_refuse_label();
         test_wipe_file_removes_target();
