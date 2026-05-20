@@ -1,7 +1,10 @@
 #include "internal/secure_wipe_engine.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <system_error>
 
@@ -17,6 +20,43 @@ namespace {
 bool is_missing_path_error(const std::error_code& error) {
     return error == std::errc::no_such_file_or_directory;
 }
+
+#if defined(__linux__)
+struct MountEntry {
+    std::string source;
+    std::string mount_point;
+    std::string mount_type;
+};
+
+std::optional<MountEntry> find_best_mount_entry(const fs::path& resolved) {
+    std::ifstream mounts("/proc/self/mounts");
+    if (!mounts) return std::nullopt;
+
+    const std::string resolved_string = resolved.string();
+    std::optional<MountEntry> best_match;
+    std::string line;
+    while (std::getline(mounts, line)) {
+        std::istringstream input(line);
+        MountEntry entry;
+        if (!(input >> entry.source >> entry.mount_point >> entry.mount_type)) {
+            continue;
+        }
+
+        entry.mount_point = decode_mount_field(std::move(entry.mount_point));
+        if (resolved_string.rfind(entry.mount_point, 0) != 0) {
+            continue;
+        }
+
+        if (best_match && entry.mount_point.size() < best_match->mount_point.size()) {
+            continue;
+        }
+
+        best_match = std::move(entry);
+    }
+
+    return best_match;
+}
+#endif
 
 std::string decode_mount_field(std::string value) {
     std::string result;
@@ -202,29 +242,9 @@ std::string PathInspector::filesystem_hint_for_path(const fs::path& path) {
 
     return wide_to_utf8(fs_name);
 #elif defined(__linux__)
-    std::ifstream mounts("/proc/self/mounts");
-    if (!mounts) return {};
-
     const fs::path resolved = canonical_or_absolute(path);
-    std::string best_mount;
-    std::string best_type;
-    std::string line;
-    while (std::getline(mounts, line)) {
-        std::istringstream input(line);
-        std::string source;
-        std::string mount_point;
-        std::string mount_type;
-        if (!(input >> source >> mount_point >> mount_type)) continue;
-
-        mount_point = decode_mount_field(mount_point);
-        if (resolved.string().rfind(mount_point, 0) != 0) continue;
-        if (mount_point.size() < best_mount.size()) continue;
-
-        best_mount = mount_point;
-        best_type = mount_type;
-    }
-
-    return best_type;
+    const auto best_match = find_best_mount_entry(resolved);
+    return best_match ? best_match->mount_type : std::string{};
 #else
     (void)path;
     return {};
@@ -247,31 +267,11 @@ StorageKind PathInspector::detect_storage_kind(const fs::path& path) {
         return StorageKind::Unknown;
     }
 #elif defined(__linux__)
-    std::ifstream mounts("/proc/self/mounts");
-    if (!mounts) return StorageKind::Unknown;
-
     const fs::path resolved = canonical_or_absolute(path);
-    std::string best_source;
-    std::string best_mount;
-    std::string line;
-    while (std::getline(mounts, line)) {
-        std::istringstream input(line);
-        std::string source;
-        std::string mount_point;
-        std::string mount_type;
-        if (!(input >> source >> mount_point >> mount_type)) continue;
+    const auto best_match = find_best_mount_entry(resolved);
+    if (!best_match || best_match->source.rfind("/dev/", 0) != 0) return StorageKind::Unknown;
 
-        mount_point = decode_mount_field(mount_point);
-        if (resolved.string().rfind(mount_point, 0) != 0) continue;
-        if (mount_point.size() < best_mount.size()) continue;
-
-        best_source = source;
-        best_mount = mount_point;
-    }
-
-    if (best_source.rfind("/dev/", 0) != 0) return StorageKind::Unknown;
-
-    std::string device_name = fs::path(best_source).filename().string();
+    std::string device_name = fs::path(best_match->source).filename().string();
     if (device_name.rfind("nvme", 0) == 0 || device_name.rfind("mmcblk", 0) == 0) {
         const std::size_t partition_marker = device_name.find('p');
         if (partition_marker != std::string::npos) {
@@ -303,21 +303,25 @@ bool PathInspector::is_dangerous_directory(const fs::path& path) {
     if (is_root_path(resolved)) return true;
 
 #if defined(_WIN32)
-    const std::string user_profile = environment_value("USERPROFILE");
-    if (!user_profile.empty() && paths_equal(resolved, fs::path(user_profile))) return true;
-
-    const std::string system_root = environment_value("SystemRoot");
-    if (!system_root.empty() && paths_equal(resolved, fs::path(system_root))) return true;
-
-    const std::string program_files = environment_value("ProgramFiles");
-    if (!program_files.empty() && paths_equal(resolved, fs::path(program_files))) return true;
-
-    const std::string program_files_x86 = environment_value("ProgramFiles(x86)");
-    if (!program_files_x86.empty() && paths_equal(resolved, fs::path(program_files_x86))) return true;
+    const std::array dangerous_environment_roots{
+        "USERPROFILE",
+        "SystemRoot",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+    };
+    return std::any_of(dangerous_environment_roots.begin(), dangerous_environment_roots.end(), [&resolved](const char* variable_name) {
+        const std::string environment_path = environment_value(variable_name);
+        return !environment_path.empty() && paths_equal(resolved, fs::path(environment_path));
+    });
 #else
-    if (resolved == fs::path("/System") ||
-        resolved == fs::path("/Library") ||
-        resolved == fs::path("/Applications")) {
+    const std::array dangerous_paths{
+        fs::path("/System"),
+        fs::path("/Library"),
+        fs::path("/Applications"),
+    };
+    if (std::any_of(dangerous_paths.begin(), dangerous_paths.end(), [&resolved](const fs::path& dangerous_path) {
+            return resolved == dangerous_path;
+        })) {
         return true;
     }
 

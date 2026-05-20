@@ -2,7 +2,9 @@
 
 #include <CLI/CLI.hpp>
 
+#include <algorithm>
 #include <array>
+#include <functional>
 #include <map>
 #include <ostream>
 #include <string>
@@ -26,13 +28,11 @@ template <typename Enum, std::size_t LabelCount>
 constexpr std::string_view enum_label_or_unknown(
     Enum value,
     const std::array<EnumLabel<Enum>, LabelCount>& labels) noexcept {
-    for (const auto& entry : labels) {
-        if (entry.value == value) {
-            return entry.label;
-        }
-    }
+    const auto entry = std::find_if(labels.begin(), labels.end(), [value](const auto& candidate) {
+        return candidate.value == value;
+    });
 
-    return "unknown"sv;
+    return entry != labels.end() ? entry->label : "unknown"sv;
 }
 
 constexpr std::array<EnumLabel<TargetKind>, 5> kTargetKindLabels{{
@@ -87,14 +87,18 @@ std::string select_help(
     const CLI::App& inspect_command,
     const CLI::App& wipe_command,
     const CLI::App& wipe_directory_command) {
-    if (inspect_command.parsed()) {
-        return inspect_command.help();
-    }
-    if (wipe_command.parsed()) {
-        return wipe_command.help();
-    }
-    if (wipe_directory_command.parsed()) {
-        return wipe_directory_command.help();
+    const std::array help_selection_order{
+        std::cref(inspect_command),
+        std::cref(wipe_command),
+        std::cref(wipe_directory_command),
+    };
+
+    const auto selected_command = std::find_if(help_selection_order.begin(), help_selection_order.end(), [](const auto& command) {
+        return command.get().parsed();
+    }};
+
+    if (selected_command != help_selection_order.end()) {
+        return selected_command->get().help();
     }
 
     return app.help();
@@ -180,12 +184,18 @@ CommandLineApplication::ParseResult CommandLineApplication::parse(const std::vec
 
     result.ok = true;
     result.request = std::move(request);
-    if (inspect_command->parsed()) {
-        result.request.kind = CommandKind::Inspect;
-    } else if (wipe_command->parsed()) {
-        result.request.kind = CommandKind::WipeFile;
-    } else if (wipe_directory_command->parsed()) {
-        result.request.kind = CommandKind::WipeDirectory;
+    const std::array command_bindings{
+        std::pair{std::cref(*inspect_command), CommandKind::Inspect},
+        std::pair{std::cref(*wipe_command), CommandKind::WipeFile},
+        std::pair{std::cref(*wipe_directory_command), CommandKind::WipeDirectory},
+    };
+
+    const auto selected_command = std::find_if(command_bindings.begin(), command_bindings.end(), [](const auto& binding) {
+        return binding.first.get().parsed();
+    });
+
+    if (selected_command != command_bindings.end()) {
+        result.request.kind = selected_command->second;
     } else {
         result.request.kind = CommandKind::Help;
         result.help_text = app.help();

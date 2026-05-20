@@ -180,3 +180,71 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `wipe` / `wipe-dir` 的位置参数、正整数 `--passes` 与枚举 `--pattern` 由 CLI11 负责校验。
 - 现有 CLI 返回码契约不变，回归测试继续覆盖 inspect 输出标签与危险目录拒绝路径。
 - 构建不再依赖运行时下载 CLI11；在离线或网络不稳定环境下也可以直接配置与编译。
+
+## 2026-05-20 STL / 更现代声明式风格函数级重构
+
+### 评估目标
+
+- 逐文件检查 `src/` 下函数是否可以用 STL algorithm 或更现代的 C++ 写法改善可读性与可维护性。
+- 标准不是“更短”或“更炫”，而是是否更接近声明式表达、是否更容易理解、修改和扩展。
+- 明确避免为了算法而算法；高副作用 I/O 流程优先保持可跟踪的命令式结构。
+
+### 标准选择结论
+
+- 本轮未将项目从 C++17 提升到 C++20。
+- 原因不是反对 `ranges`，而是当前仓库已经在 C++17 下具备 `std::find_if`、`std::any_of`、`std::array`、`std::optional` 等足够的现代工具；为了少量纯查找逻辑引入全局标准升级，收益不成比例。
+
+### 已实施重构
+
+#### `src/cli_application.cpp`
+
+- `enum_label_or_unknown(...)`：由手写 `for` 查找改为 `std::find_if`，让意图直接表达为“从标签表中找匹配项，否则返回 unknown”。
+- `select_help(...)`：由串行 `if` 链改为在固定子命令集合上做 `find_if` 选择，减少重复分支。
+- `parse(...)` 中“哪个子命令被选中”的判定：改为在绑定表上做 `find_if`，避免继续扩展时反复堆叠 `if / else if`。
+
+#### `src/path_inspector.cpp`
+
+- Linux 下 mount 匹配逻辑：`filesystem_hint_for_path(...)` 与 `detect_storage_kind(...)` 之前各自维护一段近似相同的“找最具体 mount point”循环，现已抽成 `find_best_mount_entry(...)`，减少重复和未来漂移风险。
+- `is_dangerous_directory(...)`：Windows 和非 Windows 的危险路径判断都改为基于 `std::array + std::any_of` 的声明式检查，替换多段重复的环境变量 / 固定路径比较分支。
+
+### 评估后保留原状的函数与理由
+
+#### `src/directory_wiper.cpp`
+
+- `wipe(...)`：包含 dry-run 输出、副作用统计、失败上报和最终结果聚合。若强行改成 `for_each` 或累计式算法，控制流会更难读。
+- `scan(...)`：核心是 `recursive_directory_iterator` 的遍历、递归控制和错误码分支，命令式循环最清晰。
+- `remove_empty_directories(...)`：逆序删除目录比算法包装更直观。
+
+#### `src/file_wiper.cpp`
+
+- `wipe(...)`：覆盖写入、分块循环、错误短路和删除流程高度状态化，不适合为了声明式而隐藏控制流。
+- `obscure_name_best_effort(...)`：重命名重试属于典型命令式重试逻辑，`find_if` 反而会把失败处理压进 lambda 中，降低可读性。
+- `fill_buffer(...)` 已经在随机写分支使用 `std::generate_n`，当前实现已经是合适的现代 STL 用法。
+
+#### `src/native_file.cpp`
+
+- 该文件本质上是跨平台底层 I/O 包装，重点是逐步 guard 和错误返回。用算法不会提升可维护性。
+
+#### `src/secure_wipe.cpp`
+
+- 顶层 facade 转发已经通过 `invoke_with_default_facade(...)` 收敛，当前实现已经足够简洁且清晰。
+
+#### `src/secure_wipe_engine.cpp`
+
+- 当前仅包含轻量 reporter 与 facade 组合代码，没有值得再用 STL algorithm 改写的重复选择逻辑。
+
+#### `src/main.cpp`
+
+- 当前入口函数只负责 `ensure_utf8`、参数装配和应用对象调用，已经是最小且清晰的形式。
+
+### 本轮结论
+
+- 适合算法化 / 声明式重构的，主要是“查找、匹配、去重复筛选”这一类纯逻辑 helper。
+- 不适合算法化的，主要是“文件系统遍历、文件覆写、系统 API 调用、失败即返回”的高副作用流程。
+- 因此，本轮不是全面把 `for` 改成 STL，而是按可读性收益选择性替换。
+
+### 验证
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- 结果：构建通过，7 个测试全部通过。
