@@ -1,8 +1,35 @@
-# 架构设计
+# 系统架构
 
-## 设计目标
+## 架构驱动因素
 
-当前架构的目标不是为了“做出更多文件”，而是为了把公共契约、内部领域逻辑和表现层边界拆清楚，降低未来引入设备级 sanitization、报告系统和更复杂平台探测时的耦合成本。
+当前架构的重点不是把所有擦除相关能力都塞进一个版本，而是围绕以下驱动因素组织代码：
+
+- 安全优先：危险目标要优先拒绝，而不是优先“帮用户做完”。
+- 边界清晰：公共契约、CLI 表现层、内部引擎和文档各自负责不同层面的变化。
+- 易于演进：未来引入设备级 sanitization、报告系统或更多平台能力时，不必推翻现有接口。
+- 易于验证：构建、测试和文档能作为同一套工程交付基线被审查。
+
+## 系统上下文
+
+```mermaid
+flowchart LR
+	User[终端用户]
+	Integrator[库调用方]
+	Maintainer[维护者]
+	CI[CI / 审阅流程]
+
+	subgraph System[SecureWipe-Cpp]
+		CLI[CLI 工具]
+		API[公共库 API]
+		Docs[工程文档]
+	end
+
+	User -->|inspect / wipe / wipe-dir| CLI
+	Integrator -->|inspect_target / wipe_*| API
+	Maintainer -->|重构与扩展| API
+	Maintainer -->|更新| Docs
+	CI -->|build / test / docs check| System
+```
 
 ## 分层概览
 
@@ -14,6 +41,52 @@
 | CLI 应用层 | `src/cli_application.cpp` + `src/internal/cli_application.h` | 参数解析、帮助输出、CLI 返回码和表现逻辑 |
 | 测试层 | `tests/` | 回归行为与参数校验验证 |
 | 文档层 | `docs/`, `mkdocs.yml` | 维护项目知识、使用方式和工程约束 |
+
+## 组件视图
+
+```mermaid
+flowchart TB
+	subgraph Entry[入口与表现层]
+		Main[main.cpp]
+		CLI[CommandLineApplication]
+	end
+
+	subgraph Contract[公共契约]
+		Header[include/secure_wipe.h]
+		ApiFacade[src/secure_wipe.cpp]
+	end
+
+	subgraph Engine[内部引擎]
+		Facade[SecureWipeFacade]
+		Inspector[PathInspector]
+		Directory[DirectoryWiper]
+		File[FileWiper]
+		Native[NativeFile]
+		Reporter[OperationReporter]
+	end
+
+	subgraph Quality[验证与知识]
+		Tests[tests/]
+		Docs[docs/]
+	end
+
+	Main --> CLI
+	CLI --> Header
+	CLI --> ApiFacade
+	Header --> ApiFacade
+	ApiFacade --> Facade
+	Facade --> Inspector
+	Facade --> Directory
+	Facade --> File
+	Directory --> File
+	File --> Native
+	Directory --> Reporter
+	Facade --> Reporter
+	Tests --> Header
+	Tests --> CLI
+	Docs -. 说明 .-> CLI
+	Docs -. 说明 .-> Engine
+```
 
 ## 关键对象职责
 
@@ -62,6 +135,39 @@
 - 控制输出和退出码
 - 作为 CLI 的唯一应用层对象
 
+## 运行时视图
+
+以下序列图展示 `wipe-dir <dir> --yes` 的主干执行路径：
+
+```mermaid
+sequenceDiagram
+	actor User as User
+	participant CLI as CommandLineApplication
+	participant API as wipe_directory(...)
+	participant Facade as SecureWipeFacade
+	participant Inspector as PathInspector
+	participant Directory as DirectoryWiper
+	participant File as FileWiper
+	participant Native as NativeFile
+
+	User->>CLI: securewipe wipe-dir <dir> --yes
+	CLI->>API: wipe_directory(path, options, false, true)
+	API->>Facade: facade.wipe_directory(...)
+	Facade->>Inspector: inspect(path)
+	Inspector-->>Facade: InspectionReport
+	Facade->>Directory: wipe(path, options, dry_run, yes)
+	loop each regular file
+		Directory->>File: wipe(file, options)
+		File->>Native: open / write / flush / close
+		Native-->>File: low-level result
+		File-->>Directory: WipeResult
+	end
+	Directory-->>Facade: aggregated WipeResult
+	Facade-->>API: WipeResult
+	API-->>CLI: WipeResult
+	CLI-->>User: stdout/stderr + exit code
+```
+
 ## 头文件边界
 
 公共头和私有头必须明确分层：
@@ -74,6 +180,31 @@
 - 避免实现细节被误当成稳定接口
 - 降低未来重构对外部调用方的影响
 - 让目录语义对新维护者一眼可见
+
+## 关键设计决策
+
+### 公共 API 与实现分离
+
+- `include/secure_wipe.h` 是对外稳定契约。
+- `src/internal/` 只承载实现细节。
+- 这让调用方不需要感知内部对象拆分或文件重构。
+
+### 领域层不直接依赖控制台输出
+
+- 引擎内部通过 `OperationReporter` 抽象操作报告。
+- CLI 或 facade 可以决定是否将事件写到 `stdout` / `stderr`。
+- 这让测试替身和未来其它表现层更容易接入。
+
+### CLI11 仅停留在 CLI 层
+
+- CLI11 用于参数解析、帮助生成、类型检查和子命令建模。
+- 它不会渗透到公共 API 或擦除引擎对象中。
+- 当前仓库将 CLI11 vendored 到 `third_party/`，避免构建时网络依赖进入主流程。
+
+### 文档视为架构资产
+
+- `docs/` 与代码一起演进，而不是作为发布前补充材料。
+- 需求、架构、CLI 和安全边界文档共同构成当前工程交付的一部分。
 
 ## 当前扩展方向
 

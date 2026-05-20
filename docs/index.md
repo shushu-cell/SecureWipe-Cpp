@@ -65,9 +65,10 @@ ctest --test-dir build --output-on-failure
 
 ## 文档地图
 
+- [需求分析](engineering/requirements.md)：问题定义、范围边界、功能/非功能需求与验收口径
 - [CLI 使用](guide/cli.md)：命令、参数、输出字段和退出码
 - [安全边界](guide/safety.md)：当前实现的真实承诺与风险范围
-- [架构设计](engineering/architecture.md)：模块边界、对象职责和扩展方向
+- [系统架构](engineering/architecture.md)：系统上下文、组件关系、运行时主干流程和关键设计决策
 - [公共 API](engineering/api.md)：头文件、数据结构和顶层接口
 - [开发指南](engineering/development.md)：构建、测试、目录结构和变更流程
 - [文档维护](engineering/docs-maintenance.md)：如何让文档持续跟随代码变化
