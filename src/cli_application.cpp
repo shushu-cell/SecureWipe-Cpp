@@ -95,7 +95,7 @@ std::string select_help(
 
     const auto selected_command = std::find_if(help_selection_order.begin(), help_selection_order.end(), [](const auto& command) {
         return command.get().parsed();
-    }};
+    });
 
     if (selected_command != help_selection_order.end()) {
         return selected_command->get().help();
