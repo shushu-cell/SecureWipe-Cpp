@@ -312,10 +312,12 @@ void CommandLineApplication::print_inspection_report(const InspectionReport& rep
         write_field(output_, "warning", warning);
     }
 
-    if (!detail) {
-        return;
+    if (detail) {
+        print_detailed_inspection_report(report);
     }
+}
 
+void CommandLineApplication::print_detailed_inspection_report(const InspectionReport& report) const {
     write_field(output_, "device-bus", to_string(report.device_capabilities.bus_kind));
     write_field(output_, "trim-support", to_string(report.device_capabilities.trim_support));
     write_field(output_, "device-sanitize-review", to_string(report.device_capabilities.device_sanitize_review));

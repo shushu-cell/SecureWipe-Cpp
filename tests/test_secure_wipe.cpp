@@ -156,6 +156,10 @@ void test_cli_inspect_reports_stable_labels() {
     require(matches_any(recommendation,
                         {"best-effort-file-overwrite", "review-before-wipe", "refuse"}),
             "CLI inspect should render recommendations using the supported label set");
+        require(!contains(report, "device-bus:"),
+            "Default CLI inspect output should not include detailed capability fields");
+        require(!contains(report, "preferred-erase-method:"),
+            "Default CLI inspect output should keep erase-path detail behind --detail");
 }
 
 void test_cli_inspect_detail_reports_capability_fields() {
