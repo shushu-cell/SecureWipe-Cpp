@@ -1,5 +1,9 @@
 #include "internal/secure_wipe_engine.h"
 
+#if defined(__linux__)
+#include "internal/linux_mount_utils.h"
+#endif
+
 #include <array>
 #include <cctype>
 #include <fstream>
@@ -174,61 +178,6 @@ void populate_windows_device_descriptor(HANDLE handle, DeviceProbeSnapshot& snap
 #endif
 
 #if defined(__linux__)
-struct MountEntry {
-    std::string source;
-    std::string mount_point;
-    std::string mount_type;
-};
-
-std::string decode_mount_field(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for (std::size_t index = 0; index < value.size(); ++index) {
-        if (index + 3 < value.size() && value.compare(index, 4, "\\040") == 0) {
-            result.push_back(' ');
-            index += 3;
-            continue;
-        }
-
-        result.push_back(value[index]);
-    }
-
-    return result;
-}
-
-std::optional<MountEntry> find_best_mount_entry(const fs::path& path) {
-    std::ifstream mounts("/proc/self/mounts");
-    if (!mounts) {
-        return std::nullopt;
-    }
-
-    std::error_code ec;
-    const fs::path resolved = fs::weakly_canonical(path, ec);
-    const std::string resolved_string = (!ec ? resolved : fs::absolute(path, ec)).string();
-
-    std::optional<MountEntry> best_match;
-    std::string line;
-    while (std::getline(mounts, line)) {
-        std::istringstream input(line);
-        MountEntry entry;
-        if (!(input >> entry.source >> entry.mount_point >> entry.mount_type)) {
-            continue;
-        }
-
-        entry.mount_point = decode_mount_field(entry.mount_point);
-        if (resolved_string.rfind(entry.mount_point, 0) != 0) {
-            continue;
-        }
-
-        if (best_match && entry.mount_point.size() < best_match->mount_point.size()) {
-            continue;
-        }
-
-        best_match = std::move(entry);
-    }
-
-    return best_match;
-}
 
 std::string read_text_file(const fs::path& path) {
     std::ifstream input(path);
@@ -239,23 +188,6 @@ std::string read_text_file(const fs::path& path) {
     std::string value;
     std::getline(input, value);
     return value;
-}
-
-std::string normalize_block_device_name(std::string_view source) {
-    std::string device_name = fs::path(source).filename().string();
-    if (device_name.rfind("nvme", 0) == 0 || device_name.rfind("mmcblk", 0) == 0) {
-        const std::size_t partition_marker = device_name.find('p');
-        if (partition_marker != std::string::npos) {
-            device_name = device_name.substr(0, partition_marker);
-        }
-        return device_name;
-    }
-
-    while (!device_name.empty() && std::isdigit(static_cast<unsigned char>(device_name.back())) != 0) {
-        device_name.pop_back();
-    }
-
-    return device_name;
 }
 
 DeviceBusKind infer_linux_bus_kind(std::string_view sysfs_path, std::string_view device_name) {
@@ -346,7 +278,7 @@ DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, Sto
     }
     CloseHandle(handle);
 #elif defined(__linux__)
-    const auto best_match = find_best_mount_entry(path);
+    const auto best_match = find_best_linux_mount_entry(path);
     if (!best_match) {
         append_evidence(snapshot.evidence, "Linux mount metadata could not be resolved for this path.");
         return snapshot;
@@ -357,7 +289,7 @@ DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, Sto
         return snapshot;
     }
 
-    const std::string device_name = normalize_block_device_name(best_match->source);
+    const std::string device_name = normalize_linux_block_device_name(best_match->source);
     if (device_name.empty()) {
         append_evidence(snapshot.evidence, "Linux block device name could not be normalized from the mount source.");
         return snapshot;

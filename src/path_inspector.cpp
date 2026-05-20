@@ -1,12 +1,14 @@
 #include "internal/secure_wipe_engine.h"
 
+#if defined(__linux__)
+#include "internal/linux_mount_utils.h"
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <fstream>
-#include <optional>
 #include <ranges>
-#include <sstream>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -20,57 +22,6 @@ namespace {
 
 bool is_missing_path_error(const std::error_code& error) {
     return error == std::errc::no_such_file_or_directory;
-}
-
-#if defined(__linux__)
-struct MountEntry {
-    std::string source;
-    std::string mount_point;
-    std::string mount_type;
-};
-
-std::optional<MountEntry> find_best_mount_entry(const fs::path& resolved) {
-    std::ifstream mounts("/proc/self/mounts");
-    if (!mounts) return std::nullopt;
-
-    const std::string resolved_string = resolved.string();
-    std::optional<MountEntry> best_match;
-    std::string line;
-    while (std::getline(mounts, line)) {
-        std::istringstream input(line);
-        MountEntry entry;
-        if (!(input >> entry.source >> entry.mount_point >> entry.mount_type)) {
-            continue;
-        }
-
-        entry.mount_point = decode_mount_field(std::move(entry.mount_point));
-        if (resolved_string.rfind(entry.mount_point, 0) != 0) {
-            continue;
-        }
-
-        if (best_match && entry.mount_point.size() < best_match->mount_point.size()) {
-            continue;
-        }
-
-        best_match = std::move(entry);
-    }
-
-    return best_match;
-}
-#endif
-
-std::string decode_mount_field(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for (std::size_t index = 0; index < value.size(); ++index) {
-        if (index + 3 < value.size() && value.compare(index, 4, "\\040") == 0) {
-            result.push_back(' ');
-            index += 3;
-            continue;
-        }
-        result.push_back(value[index]);
-    }
-    return result;
 }
 
 #if defined(_WIN32)
@@ -244,7 +195,7 @@ std::string PathInspector::filesystem_hint_for_path(const fs::path& path) {
     return wide_to_utf8(fs_name);
 #elif defined(__linux__)
     const fs::path resolved = canonical_or_absolute(path);
-    const auto best_match = find_best_mount_entry(resolved);
+    const auto best_match = find_best_linux_mount_entry(resolved);
     return best_match ? best_match->mount_type : std::string{};
 #else
     (void)path;
@@ -269,20 +220,10 @@ StorageKind PathInspector::detect_storage_kind(const fs::path& path) {
     }
 #elif defined(__linux__)
     const fs::path resolved = canonical_or_absolute(path);
-    const auto best_match = find_best_mount_entry(resolved);
+    const auto best_match = find_best_linux_mount_entry(resolved);
     if (!best_match || best_match->source.rfind("/dev/", 0) != 0) return StorageKind::Unknown;
 
-    std::string device_name = fs::path(best_match->source).filename().string();
-    if (device_name.rfind("nvme", 0) == 0 || device_name.rfind("mmcblk", 0) == 0) {
-        const std::size_t partition_marker = device_name.find('p');
-        if (partition_marker != std::string::npos) {
-            device_name = device_name.substr(0, partition_marker);
-        }
-    } else {
-        while (!device_name.empty() && std::isdigit(static_cast<unsigned char>(device_name.back())) != 0) {
-            device_name.pop_back();
-        }
-    }
+    const std::string device_name = normalize_linux_block_device_name(best_match->source);
 
     std::ifstream rotational("/sys/class/block/" + device_name + "/queue/rotational");
     if (!rotational) return StorageKind::Unknown;
