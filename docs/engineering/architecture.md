@@ -10,7 +10,7 @@
 |---|---|---|
 | 公共接口层 | `include/secure_wipe.h` | 提供稳定的对外 API、值类型和顶层函数 |
 | 外观层 | `src/secure_wipe.cpp` | 将顶层函数转发到内部对象协作 |
-| 内部引擎层 | `src/secure_wipe_engine.cpp` + `src/internal/secure_wipe_engine.h` | 路径检查、文件句柄管理、文件擦除、目录擦除、组合协调 |
+| 内部引擎层 | `src/path_inspector.cpp`、`src/native_file.cpp`、`src/file_wiper.cpp`、`src/directory_wiper.cpp`、`src/secure_wipe_engine.cpp` + `src/internal/secure_wipe_engine.h` | 路径检查、文件句柄管理、文件擦除、目录擦除、报告抽象与对象组合 |
 | CLI 应用层 | `src/cli_application.cpp` + `src/internal/cli_application.h` | 参数解析、帮助输出、CLI 返回码和表现逻辑 |
 | 测试层 | `tests/` | 回归行为与参数校验验证 |
 | 文档层 | `docs/`, `mkdocs.yml` | 维护项目知识、使用方式和工程约束 |
@@ -41,7 +41,14 @@
 - 枚举目录中的普通文件
 - 实现 dry-run 与确认执行流程
 - 调用 `FileWiper`
+- 通过内部 reporter 抽象报告 dry-run 与单文件失败
 - 尝试清理空目录
+
+### `OperationReporter`
+
+- 抽象领域层的操作输出
+- 让擦除引擎不直接依赖 `std::cout` / `std::cerr`
+- 当前提供 `NullOperationReporter` 与 `StreamOperationReporter` 两种实现
 
 ### `SecureWipeFacade`
 
@@ -73,5 +80,7 @@
 未来如果引入设备级 sanitization，推荐继续沿用当前边界：
 
 - 新增设备能力探测对象，而不是把逻辑重新塞回 `FileWiper`
+- 保持每个领域对象的翻译单元粒度，避免重新出现“大而全”的 `*.cpp`
+- 通过 `OperationReporter` 一类的抽象继续隔离领域逻辑与表现层输出
 - 对外 API 保持稳定，优先扩展值类型和 recommendation 语义
 - CLI 只负责暴露能力，不直接内联平台分支或设备命令

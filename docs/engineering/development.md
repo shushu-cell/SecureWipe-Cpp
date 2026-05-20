@@ -58,6 +58,16 @@ mkdocs.yml               MkDocs 站点配置
 .github/workflows/       CI / 发布流程
 ```
 
+当前 `src/` 已按职责拆分为多个翻译单元，重点包括：
+
+- `path_inspector.cpp`
+- `native_file.cpp`
+- `file_wiper.cpp`
+- `directory_wiper.cpp`
+- `secure_wipe_engine.cpp`
+- `cli_application.cpp`
+- `secure_wipe.cpp`
+
 ## 变更流程建议
 
 当你修改代码时，至少同步检查以下几件事：

@@ -5,6 +5,7 @@
 #include <iosfwd>
 #include <random>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "secure_wipe.h"
@@ -18,11 +19,37 @@ struct DirectoryScan {
     std::vector<fs::path> directories;
 };
 
+class OperationReporter {
+public:
+    virtual ~OperationReporter() = default;
+
+    virtual void on_dry_run_file(const fs::path& path) = 0;
+    virtual void on_file_failure(const fs::path& path, std::string_view message) = 0;
+};
+
+class NullOperationReporter final : public OperationReporter {
+public:
+    void on_dry_run_file(const fs::path& path) override;
+    void on_file_failure(const fs::path& path, std::string_view message) override;
+};
+
+class StreamOperationReporter final : public OperationReporter {
+public:
+    StreamOperationReporter(std::ostream& output, std::ostream& error_output) noexcept;
+
+    void on_dry_run_file(const fs::path& path) override;
+    void on_file_failure(const fs::path& path, std::string_view message) override;
+
+private:
+    std::ostream& output_;
+    std::ostream& error_output_;
+};
+
 class PathInspector final {
 public:
-    InspectionReport inspect(const std::string& path) const;
-    InspectionReport inspect(const fs::path& path) const;
-    fs::path resolve_path(const fs::path& path) const;
+    [[nodiscard]] InspectionReport inspect(const std::string& path) const;
+    [[nodiscard]] InspectionReport inspect(const fs::path& path) const;
+    [[nodiscard]] fs::path resolve_path(const fs::path& path) const;
 
 private:
     static fs::path canonical_or_absolute(const fs::path& path);
@@ -62,8 +89,8 @@ class FileWiper final {
 public:
     explicit FileWiper(const PathInspector& inspector);
 
-    WipeResult wipe(const std::string& path, const WipeOptions& options) const;
-    WipeResult wipe(const fs::path& path, const WipeOptions& options) const;
+    [[nodiscard]] WipeResult wipe(const std::string& path, const WipeOptions& options) const;
+    [[nodiscard]] WipeResult wipe(const fs::path& path, const WipeOptions& options) const;
 
 private:
     static fs::path rename_candidate(const fs::path& path, int attempt);
@@ -83,29 +110,26 @@ public:
     DirectoryWiper(
         const PathInspector& inspector,
         const FileWiper& file_wiper,
-        std::ostream& output,
-        std::ostream& error_output);
+        OperationReporter& reporter);
 
-    WipeResult wipe(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
+    [[nodiscard]] WipeResult wipe(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
 
 private:
     [[nodiscard]] DirectoryScan scan(const fs::path& root) const;
-    void print_dry_run(const DirectoryScan& scan) const;
     void remove_empty_directories(const std::vector<fs::path>& directories) const;
 
     const PathInspector& inspector_;
     const FileWiper& file_wiper_;
-    std::ostream& output_;
-    std::ostream& error_output_;
+    OperationReporter& reporter_;
 };
 
 class SecureWipeFacade final {
 public:
-    SecureWipeFacade(std::ostream& output, std::ostream& error_output);
+    explicit SecureWipeFacade(OperationReporter& reporter);
 
-    InspectionReport inspect(const std::string& path) const;
-    WipeResult wipe_file(const std::string& path, const WipeOptions& options) const;
-    WipeResult wipe_directory(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
+    [[nodiscard]] InspectionReport inspect(const std::string& path) const;
+    [[nodiscard]] WipeResult wipe_file(const std::string& path, const WipeOptions& options) const;
+    [[nodiscard]] WipeResult wipe_directory(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
 
 private:
     PathInspector inspector_;

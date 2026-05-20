@@ -10,6 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(securewipe_lib STATIC
+	src/directory_wiper.cpp
+	src/file_wiper.cpp
+	src/native_file.cpp
+	src/path_inspector.cpp
 	src/secure_wipe.cpp
 	src/secure_wipe_engine.cpp
 )

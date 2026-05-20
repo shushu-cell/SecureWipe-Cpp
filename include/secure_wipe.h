@@ -42,7 +42,7 @@ enum class StrategyRecommendation {
     ReviewBeforeWipe
 };
 
-struct WipeResult {
+struct [[nodiscard]] WipeResult {
     bool ok = false;
     bool dry_run = false;
     std::uint64_t files_total = 0;
@@ -51,7 +51,7 @@ struct WipeResult {
     std::string message;  // error or info
 };
 
-struct InspectionReport {
+struct [[nodiscard]] InspectionReport {
     bool ok = false;
     bool dangerous = false;
     TargetKind target_kind = TargetKind::Missing;
@@ -63,7 +63,7 @@ struct InspectionReport {
     std::vector<std::string> warnings;
 };
 
-InspectionReport inspect_target(const std::string& path);
-WipeResult wipe_file(const std::string& path, const WipeOptions& opt);
-WipeResult wipe_directory(const std::string& dir, const WipeOptions& opt, bool dry_run, bool yes);
+[[nodiscard]] InspectionReport inspect_target(const std::string& path);
+[[nodiscard]] WipeResult wipe_file(const std::string& path, const WipeOptions& opt);
+[[nodiscard]] WipeResult wipe_directory(const std::string& dir, const WipeOptions& opt, bool dry_run, bool yes);
 } // namespace securewipe

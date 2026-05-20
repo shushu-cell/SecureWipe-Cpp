@@ -2,6 +2,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "secure_wipe.h"
@@ -15,6 +16,12 @@ public:
     int run(const std::vector<std::string>& args) const;
 
 private:
+    enum class ExitCode : int {
+        Success = 0,
+        ExecutionFailure = 1,
+        Rejected = 2
+    };
+
     enum class CommandKind {
         Help,
         Inspect,
@@ -32,15 +39,19 @@ private:
 
     struct ParseResult {
         bool ok = false;
-        int exit_code = 0;
+        ExitCode exit_code = ExitCode::Success;
         std::string error_message;
         CommandRequest request;
     };
 
-    static ParseResult parse(const std::vector<std::string>& args);
+    [[nodiscard]] static ParseResult parse(const std::vector<std::string>& args);
+    [[nodiscard]] static ParseResult make_parse_success(CommandRequest request);
+    [[nodiscard]] static ParseResult make_parse_error(std::string message);
+    [[nodiscard]] static int to_exit_code(ExitCode exit_code) noexcept;
     static void print_help(std::ostream& output);
-    static bool try_parse_positive_int(const std::string& text, int& value);
-    static bool try_parse_pattern(const std::string& text, Pattern& pattern);
+    static void write_field(std::ostream& output, std::string_view key, std::string_view value);
+    static bool try_parse_positive_int(std::string_view text, int& value);
+    static bool try_parse_pattern(std::string_view text, Pattern& pattern);
     static const char* to_string(TargetKind kind);
     static const char* to_string(StorageKind kind);
     static const char* to_string(StrategyRecommendation recommendation);

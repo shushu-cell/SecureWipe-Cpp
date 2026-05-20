@@ -2,9 +2,11 @@
 
 #include <charconv>
 #include <ostream>
-#include <system_error>
+#include <string_view>
 
 namespace securewipe::app {
+
+using namespace std::literals;
 
 CommandLineApplication::CommandLineApplication(std::ostream& output, std::ostream& error_output)
     : output_(output), error_output_(error_output) {
@@ -17,13 +19,13 @@ int CommandLineApplication::run(const std::vector<std::string>& args) const {
             error_output_ << parse_result.error_message << "\n\n";
         }
         print_help(error_output_);
-        return parse_result.exit_code;
+        return to_exit_code(parse_result.exit_code);
     }
 
     switch (parse_result.request.kind) {
     case CommandKind::Help:
         print_help(output_);
-        return 0;
+        return to_exit_code(ExitCode::Success);
     case CommandKind::Inspect:
         return run_inspect(parse_result.request);
     case CommandKind::WipeFile:
@@ -33,115 +35,108 @@ int CommandLineApplication::run(const std::vector<std::string>& args) const {
     }
 
     error_output_ << "Error: unsupported command\n";
-    return 2;
+    return to_exit_code(ExitCode::Rejected);
 }
 
 CommandLineApplication::ParseResult CommandLineApplication::parse(const std::vector<std::string>& args) {
-    ParseResult result;
-    result.ok = true;
-
-    if (args.empty() || args[0] == "--help" || args[0] == "-h") {
-        result.request.kind = CommandKind::Help;
-        return result;
+    if (args.empty()) {
+        return make_parse_success(CommandRequest{});
     }
 
-    const std::string& command = args[0];
-    if (command == "inspect") {
+    const std::string_view command = args[0];
+    if (command == "--help"sv || command == "-h"sv) {
+        return make_parse_success(CommandRequest{});
+    }
+
+    if (command == "inspect"sv) {
         if (args.size() != 2) {
-            result.ok = false;
-            result.exit_code = 2;
-            result.error_message = "Error: inspect requires exactly one <path> argument";
-            return result;
+            return make_parse_error("Error: inspect requires exactly one <path> argument");
         }
 
-        result.request.kind = CommandKind::Inspect;
-        result.request.path = args[1];
-        return result;
+        CommandRequest request;
+        request.kind = CommandKind::Inspect;
+        request.path = args[1];
+        return make_parse_success(std::move(request));
     }
 
-    if (command != "wipe" && command != "wipe-dir") {
-        result.ok = false;
-        result.exit_code = 2;
-        result.error_message = "Unknown command: " + command;
-        return result;
+    if (command != "wipe"sv && command != "wipe-dir"sv) {
+        return make_parse_error("Unknown command: " + std::string(command));
     }
 
     if (args.size() < 2) {
-        result.ok = false;
-        result.exit_code = 2;
-        result.error_message = "Error: missing <path>";
-        return result;
+        return make_parse_error("Error: missing <path>");
     }
 
-    result.request.kind = command == "wipe" ? CommandKind::WipeFile : CommandKind::WipeDirectory;
-    result.request.path = args[1];
+    CommandRequest request;
+    request.kind = command == "wipe"sv ? CommandKind::WipeFile : CommandKind::WipeDirectory;
+    request.path = args[1];
 
     for (std::size_t index = 2; index < args.size(); ++index) {
-        const std::string& option = args[index];
-        if (option == "--passes") {
+        const std::string_view option = args[index];
+        if (option == "--passes"sv) {
             if (index + 1 >= args.size()) {
-                result.ok = false;
-                result.exit_code = 2;
-                result.error_message = "Error: --passes requires a positive integer value";
-                return result;
+                return make_parse_error("Error: --passes requires a positive integer value");
             }
 
             int passes = 0;
             if (!try_parse_positive_int(args[index + 1], passes)) {
-                result.ok = false;
-                result.exit_code = 2;
-                result.error_message = "Error: --passes requires a positive integer value";
-                return result;
+                return make_parse_error("Error: --passes requires a positive integer value");
             }
 
-            result.request.options.passes = passes;
+            request.options.passes = passes;
             ++index;
             continue;
         }
 
-        if (option == "--pattern") {
+        if (option == "--pattern"sv) {
             if (index + 1 >= args.size()) {
-                result.ok = false;
-                result.exit_code = 2;
-                result.error_message = "Error: --pattern requires one of zeros|random";
-                return result;
+                return make_parse_error("Error: --pattern requires one of zeros|random");
             }
 
-            if (!try_parse_pattern(args[index + 1], result.request.options.pattern)) {
-                result.ok = false;
-                result.exit_code = 2;
-                result.error_message = "Error: unknown pattern: " + args[index + 1];
-                return result;
+            if (!try_parse_pattern(args[index + 1], request.options.pattern)) {
+                return make_parse_error("Error: unknown pattern: " + args[index + 1]);
             }
 
             ++index;
             continue;
         }
 
-        if (option == "--dry-run") {
-            result.request.dry_run = true;
+        if (option == "--dry-run"sv) {
+            request.dry_run = true;
             continue;
         }
 
-        if (option == "--yes") {
-            result.request.yes = true;
+        if (option == "--yes"sv) {
+            request.yes = true;
             continue;
         }
 
-        result.ok = false;
-        result.exit_code = 2;
-        result.error_message = "Error: unknown option: " + option;
-        return result;
+        return make_parse_error("Error: unknown option: " + std::string(option));
     }
 
-    if (result.request.kind == CommandKind::WipeFile && (result.request.dry_run || result.request.yes)) {
-        result.ok = false;
-        result.exit_code = 2;
-        result.error_message = "Error: --dry-run and --yes are only valid with wipe-dir";
-        return result;
+    if (request.kind == CommandKind::WipeFile && (request.dry_run || request.yes)) {
+        return make_parse_error("Error: --dry-run and --yes are only valid with wipe-dir");
     }
 
+    return make_parse_success(std::move(request));
+}
+
+CommandLineApplication::ParseResult CommandLineApplication::make_parse_success(CommandRequest request) {
+    ParseResult result;
+    result.ok = true;
+    result.request = std::move(request);
     return result;
+}
+
+CommandLineApplication::ParseResult CommandLineApplication::make_parse_error(std::string message) {
+    ParseResult result;
+    result.exit_code = ExitCode::Rejected;
+    result.error_message = std::move(message);
+    return result;
+}
+
+int CommandLineApplication::to_exit_code(ExitCode exit_code) noexcept {
+    return static_cast<int>(exit_code);
 }
 
 void CommandLineApplication::print_help(std::ostream& output) {
@@ -162,19 +157,23 @@ Examples:
 )";
 }
 
-bool CommandLineApplication::try_parse_positive_int(const std::string& text, int& value) {
+void CommandLineApplication::write_field(std::ostream& output, std::string_view key, std::string_view value) {
+    output << key << ": " << value << '\n';
+}
+
+bool CommandLineApplication::try_parse_positive_int(std::string_view text, int& value) {
     const char* begin = text.data();
     const char* end = text.data() + text.size();
     const auto [ptr, error] = std::from_chars(begin, end, value);
     return error == std::errc() && ptr == end && value > 0;
 }
 
-bool CommandLineApplication::try_parse_pattern(const std::string& text, Pattern& pattern) {
-    if (text == "zeros") {
+bool CommandLineApplication::try_parse_pattern(std::string_view text, Pattern& pattern) {
+    if (text == "zeros"sv) {
         pattern = Pattern::Zeros;
         return true;
     }
-    if (text == "random") {
+    if (text == "random"sv) {
         pattern = Pattern::Random;
         return true;
     }
@@ -235,47 +234,49 @@ int CommandLineApplication::run_inspect(const CommandRequest& request) const {
     const InspectionReport report = inspect_target(request.path);
     if (!report.ok) {
         error_output_ << "Inspect failed: " << report.message << '\n';
-        return 1;
+        return to_exit_code(ExitCode::ExecutionFailure);
     }
 
     print_inspection_report(report);
-    return report.recommendation == StrategyRecommendation::Refuse ? 2 : 0;
+    return report.recommendation == StrategyRecommendation::Refuse
+        ? to_exit_code(ExitCode::Rejected)
+        : to_exit_code(ExitCode::Success);
 }
 
 int CommandLineApplication::run_wipe_file(const CommandRequest& request) const {
     const WipeResult result = wipe_file(request.path, request.options);
     if (!result.ok) {
         error_output_ << "Wipe failed: " << result.message << '\n';
-        return 1;
+        return to_exit_code(ExitCode::ExecutionFailure);
     }
 
     output_ << result.message << '\n';
-    return 0;
+    return to_exit_code(ExitCode::Success);
 }
 
 int CommandLineApplication::run_wipe_directory(const CommandRequest& request) const {
     const WipeResult result = wipe_directory(request.path, request.options, request.dry_run, request.yes);
     if (!result.ok) {
         error_output_ << "Wipe-dir failed: " << result.message << '\n';
-        return 1;
+        return to_exit_code(ExitCode::ExecutionFailure);
     }
 
     output_ << result.message << '\n';
-    return 0;
+    return to_exit_code(ExitCode::Success);
 }
 
 void CommandLineApplication::print_inspection_report(const InspectionReport& report) const {
-    output_ << "path: " << report.canonical_path << '\n';
-    output_ << "target-kind: " << to_string(report.target_kind) << '\n';
-    output_ << "storage-kind: " << to_string(report.storage_kind) << '\n';
-    output_ << "recommendation: " << to_string(report.recommendation) << '\n';
+    write_field(output_, "path", report.canonical_path);
+    write_field(output_, "target-kind", to_string(report.target_kind));
+    write_field(output_, "storage-kind", to_string(report.storage_kind));
+    write_field(output_, "recommendation", to_string(report.recommendation));
     if (!report.volume_name.empty()) {
-        output_ << "volume: " << report.volume_name << '\n';
+        write_field(output_, "volume", report.volume_name);
     }
-    output_ << "dangerous: " << (report.dangerous ? "yes" : "no") << '\n';
-    output_ << "summary: " << report.message << '\n';
+    write_field(output_, "dangerous", report.dangerous ? "yes"sv : "no"sv);
+    write_field(output_, "summary", report.message);
     for (const auto& warning : report.warnings) {
-        output_ << "warning: " << warning << '\n';
+        write_field(output_, "warning", warning);
     }
 }
 
