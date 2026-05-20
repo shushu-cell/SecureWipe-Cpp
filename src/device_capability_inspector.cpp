@@ -92,6 +92,33 @@ CapabilityState classify_crypto_erase_review(const DeviceProbeSnapshot& snapshot
 }
 
 #if defined(_WIN32)
+class ScopedWindowsHandle final {
+public:
+    explicit ScopedWindowsHandle(HANDLE handle) noexcept
+        : handle_(handle) {
+    }
+
+    ~ScopedWindowsHandle() noexcept {
+        if (is_valid()) {
+            CloseHandle(handle_);
+        }
+    }
+
+    ScopedWindowsHandle(const ScopedWindowsHandle&) = delete;
+    ScopedWindowsHandle& operator=(const ScopedWindowsHandle&) = delete;
+
+    [[nodiscard]] HANDLE get() const noexcept {
+        return handle_;
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept {
+        return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+    }
+
+private:
+    HANDLE handle_;
+};
+
 std::wstring volume_device_path_from_root(const fs::path& root) {
     const std::wstring root_string = root.wstring();
     if (root_string.size() < 2 || root_string[1] != L':') {
@@ -258,25 +285,24 @@ DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, Sto
         return snapshot;
     }
 
-    const HANDLE handle = CreateFileW(
+    const ScopedWindowsHandle handle(CreateFileW(
         device_path.c_str(),
         0,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr,
         OPEN_EXISTING,
         0,
-        nullptr);
-    if (handle == INVALID_HANDLE_VALUE) {
+        nullptr));
+    if (!handle.is_valid()) {
         append_evidence(snapshot.evidence, "Windows volume handle could not be opened for read-only capability probing.");
         return snapshot;
     }
 
-    populate_windows_device_descriptor(handle, snapshot);
-    snapshot.trim_support = query_trim_support(handle);
+    populate_windows_device_descriptor(handle.get(), snapshot);
+    snapshot.trim_support = query_trim_support(handle.get());
     if (snapshot.trim_support != CapabilityState::Unknown) {
         append_evidence(snapshot.evidence, "Windows storage stack returned trim/discard capability information.");
     }
-    CloseHandle(handle);
 #elif defined(__linux__)
     const auto best_match = find_best_linux_mount_entry(path);
     if (!best_match) {
