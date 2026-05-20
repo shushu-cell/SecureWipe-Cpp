@@ -1,4 +1,4 @@
-## 2026-05-20 下一步核心功能计划（待审查）
+## 2026-05-20 下一步核心功能计划（经三轮审查修订）
 
 ### 结论
 
@@ -64,20 +64,111 @@
 - 为什么推荐这条路径，而不是另一条路径
 - 当前结论是“已确认支持”“已确认不支持”还是“无法可靠探测”
 
-### 具体实现方案
+### 三轮设计审查
+
+#### 第 1 轮：安全语义与公共契约审查
+
+##### 发现的问题
+
+- 原方案把 `AtaSecureErase`、`AtaSanitize`、`NvmeSanitize`、`NvmeFormat` 等具体 destructive 方法过早放进阶段 1 的推荐动作枚举，容易把“总线形态像 NVMe”误写成“已确认支持 NVMe sanitize”。
+- 原方案倾向于把大量字段直接平铺到 `InspectionReport` 中，会让公共报告结构快速膨胀，也会让默认 CLI 输出难以控制复杂度。
+- 原方案有输出 vendor / model / serial 等设备识别信息的倾向，但在 phase 1 中这类信息的产品价值低于误导和隐私风险。
+
+##### 审查结论
+
+- 阶段 1 的目标不是给出“具体执行命令”，而是给出**更可信的设备级风险判断与路径建议**。
+- 公共 API 应优先新增**聚合后的报告子结构**，而不是把细字段分散到顶层。
+- 阶段 1 不默认暴露完整敏感设备标识；优先暴露与策略判断直接相关的能力结论与证据说明。
+
+##### 修改后的设计决策
+
+- 保留现有 `StrategyRecommendation`，继续承担“粗粒度安全建议”。
+- 新增聚合型结构，建议命名方向为：
+  - `DeviceCapabilities`
+  - `ErasePathAdvice`
+- 阶段 1 的 `EraseMethod` 不再过度细分到真实 destructive 命令级别，而是先收敛为：
+  - `Unknown`
+  - `Refuse`
+  - `BestEffortFileOverwrite`
+  - `BestEffortDirectoryWipe`
+  - `DeviceSanitizeReview`
+  - `CryptoEraseReview`
+  - `ManualReview`
+
+这样做的原因是：phase 1 只做探测和解释，不做命令执行；先把“应不应该进入设备级清除路线”说对，比过早枚举具体协议动作更重要。
+
+#### 第 2 轮：职责边界与架构演进审查
+
+##### 发现的问题
+
+- 若继续把新逻辑塞回 `PathInspector`，它会从“路径安全检查 + 粗粒度介质判断”膨胀成一个新的 God object。
+- 计划里虽然提到了 `DeviceCapabilityInspector` 和 `StrategyAdvisor`，但没有明确谁负责 orchestrate inspect 主流程。
+- 若平台探测细节直接泄漏到 CLI 或 facade 之外，后续设备级执行阶段会更难重构。
+
+##### 审查结论
+
+- `PathInspector` 应保持窄职责：路径解析、目标类型判断、危险目录判断、当前粗粒度 `StorageKind`。
+- 新能力应该由**独立对象**承载，且在 inspect 流程中由更高层进行组合。
+- 当前最自然的编排点不是 CLI，也不是 `PathInspector`，而是 `SecureWipeFacade::inspect(...)`。
+
+##### 修改后的设计决策
+
+- `SecureWipeFacade` 扩展为 inspect 编排者：
+  1. `PathInspector` 生成基础 `InspectionReport`
+  2. `DeviceCapabilityInspector` 读取非破坏性设备能力快照
+  3. `ErasePathAdvisor` 基于基础报告 + 设备能力生成更细粒度路径建议与解释
+- 新增内部对象建议：
+  - `DeviceCapabilityInspector`
+  - `ErasePathAdvisor`
+- 不新增新的对外 inspect API，而是让现有 `inspect_target(...)` 返回增强后的 `InspectionReport`。
+
+##### 同步缩减实现风险
+
+- phase 1 不引入新的大而全“inspection service”层，先由 `SecureWipeFacade` 直接组合三个对象即可。
+- phase 1 不要求平台探测模块输出原始厂商协议细节，只输出内部消化后的能力结论与证据文本。
+
+#### 第 3 轮：测试策略、CLI 变更与交付风险审查
+
+##### 发现的问题
+
+- 如果能力探测依赖当前机器真实硬件，测试会高度脆弱、难以复现。
+- 如果默认 `inspect` 输出一次性扩展太多字段，现有 CLI 行为和文档会发生大范围漂移。
+- 如果把“推断”“确认”“无法探测”混在一起，用户会误解输出可信度。
+
+##### 审查结论
+
+- phase 1 必须从设计上保证可 fake、可 stub、可做稳定断言。
+- CLI 默认输出应尽量稳定，把新字段集中到详细模式中暴露。
+- 能力结论必须显式区分 `Unknown / Unsupported / Supported / Restricted` 这一类状态，不能退化成布尔值。
+
+##### 修改后的设计决策
+
+- 新增 `CapabilityState`，用于表达：
+  - `Unknown`
+  - `Unsupported`
+  - `Supported`
+  - `Restricted`
+- 新增 `DeviceBusKind`，但只用于**总线/设备形态级别**判断，不把它直接等价为 sanitize 支持。
+- CLI 变更收敛为：
+  - 默认 `inspect <path>` 保持当前简洁输出为主
+  - 新增 `inspect --detail <path>` 输出 `device-capabilities` 与 `erase-path-advice` 相关字段
+- 测试设计必须允许注入 fake probe / fake capability snapshot，单元测试重点断言“给定能力快照时，advisor 是否给出正确路径建议”。
+
+### 审查后的最终实施方案
 
 #### 1. 领域模型扩展
 
-建议保持现有 `StrategyRecommendation` 不变，继续让它承担“粗粒度安全建议”职责；在此基础上，**新增一层更细粒度的设备与路径信息**，避免把已有语义硬改得过重。
+保持现有 `StrategyRecommendation` 不变，继续让它承担“粗粒度安全建议”职责；在此基础上，**新增聚合型设备能力与路径建议结构**，避免把已有语义硬改得过重。
 
 建议新增的值类型方向：
 
-- `DeviceBusKind` 或等价枚举：描述 `Unknown / Usb / Ata / Sata / Nvme / Scsi / Virtual / Network` 等设备连接形态
-- `CapabilityState`：不要用简单 `bool`，而用 `Unknown / Unsupported / Supported / Restricted` 之类的四态表达，避免把“探测不到”误写成“不支持”
-- `EraseMethod` 或等价枚举：描述 `BestEffortFileOverwrite / BestEffortDirectoryWipe / AtaSecureErase / AtaSanitize / NvmeSanitize / NvmeFormat / CryptoErase / ManualReview / Refuse` 等更具体的推荐动作
-- `DeviceCapabilities`：封装设备总线、是否可移动、是否疑似 USB 桥接、是否支持 trim/discard、是否可能支持 ATA/NVMe sanitize、探测证据文本等
+- `DeviceBusKind`：描述 `Unknown / Usb / Ata / Sata / Nvme / Scsi / Virtual / Network` 等设备连接形态
+- `CapabilityState`：明确用 `Unknown / Unsupported / Supported / Restricted` 表达能力结论，避免把“探测不到”误写成“不支持”
+- `EraseMethod`：阶段 1 先收敛为 `Unknown / Refuse / BestEffortFileOverwrite / BestEffortDirectoryWipe / DeviceSanitizeReview / CryptoEraseReview / ManualReview`
+- `DeviceCapabilities`：封装设备总线、是否可移动、是否疑似 USB 桥接、trim/discard 能力、设备级擦除路径是否值得进入 review、证据文本等
+- `ErasePathAdvice`：封装当前首选路径建议与理由列表
 
-建议将这些新增字段**以增量方式附加到 `InspectionReport`**，而不是创建一个完全平行的新 inspect API。原因是当前系统已经把 `inspect` 作为安全模型入口，继续沿用这一入口更自然。
+建议将 `DeviceCapabilities` 与 `ErasePathAdvice` **以子结构形式附加到 `InspectionReport`**，而不是创建一个完全平行的新 inspect API。原因是当前系统已经把 `inspect` 作为安全模型入口，继续沿用这一入口更自然。
 
 #### 2. 内部分层方案
 
@@ -88,16 +179,17 @@
   - 输出：`DeviceCapabilities`
   - 职责：只做非破坏性的设备能力探测与证据收集
 
-- `StrategyAdvisor`
+- `ErasePathAdvisor`
   - 输入：`InspectionReport` 的现有结论 + `DeviceCapabilities`
-  - 输出：更具体的 `EraseMethod` 与解释理由列表
+  - 输出：`ErasePathAdvice`
   - 职责：只负责“基于能力与风险做推荐”，不直接执行擦除命令
 
 这样可以保持职责清晰：
 
 - `PathInspector` 继续做路径安全与粗粒度介质判断
 - `DeviceCapabilityInspector` 负责更细的设备能力探测
-- `StrategyAdvisor` 负责解释“为什么推荐这条路径”
+- `ErasePathAdvisor` 负责解释“为什么推荐这条路径”
+- `SecureWipeFacade::inspect(...)` 负责编排三者，而不是让 `PathInspector` 自己扩张
 
 #### 3. 平台实现策略
 
@@ -115,9 +207,10 @@
 目标是先拿到：
 
 - bus type
-- vendor / model 的基础识别信息
 - trim/discard 类能力线索
 - 是否疑似可移动设备或 USB 桥接
+
+阶段 1 不要求默认输出 vendor / model / serial；如内部读取到，也先只用于推断，不作为默认外部字段暴露。
 
 ##### Linux
 
@@ -151,7 +244,7 @@
 更稳妥的暴露方式：
 
 - 默认 `inspect <path>` 保持当前简洁输出和现有字段顺序尽量稳定
-- 新增 `inspect --detail <path>` 或等价详细模式，输出新增的设备能力字段、推荐动作与理由列表
+- 新增 `inspect --detail <path>`，输出新增的设备能力字段、路径建议和理由列表
 
 这样做的好处：
 
@@ -165,8 +258,8 @@
 
 建议：
 
-- 抽象平台探测接口，让 `DeviceCapabilityInspector` 可以注入 fake probe / stub
-- 单元测试重点覆盖“策略映射”而不是依赖本机真实硬件
+- 抽象平台探测快照或平台 probe seam，让 `DeviceCapabilityInspector` 可以注入 fake probe / stub
+- 单元测试重点覆盖“给定设备能力快照时 advisor 的映射结果”，而不是依赖本机真实硬件
 - CLI 测试重点验证：
   - `inspect --detail` 新字段是否出现
   - `EraseMethod` / 理由文案是否稳定
@@ -233,6 +326,24 @@
 - 默认不应过度打印完整敏感标识
 - 文档要说明哪些字段主要用于诊断，不应被包装成审计证书
 
+### 阶段 1 的最小实现边界
+
+为了确保这一步真正“小步且可交付”，阶段 1 的实现边界进一步收敛为：
+
+- 必做：
+  - 扩展 `InspectionReport` 的公共结构
+  - 新增 `DeviceCapabilityInspector` 与 `ErasePathAdvisor`
+  - `SecureWipeFacade::inspect(...)` 组合基础检查、能力探测和路径建议
+  - CLI 新增 `inspect --detail`
+  - 测试新增 fake probe 场景和详细输出断言
+  - docs 同步更新
+
+- 不做：
+  - 真实 destructive 设备命令
+  - 结构化 JSON 输出
+  - 完整设备品牌识别展示
+  - 审计证书或验证日志
+
 ### 小步迭代顺序（从易到难）
 
 建议按下面顺序推进，而不是一步冲到设备级执行：
@@ -259,15 +370,16 @@
 - `inspect --detail` 或等价详细模式能够输出新增设备能力与推荐路径解释
 - 无法确认能力时，系统输出保守结论，不夸大支持范围
 - 新增测试不依赖开发机真实磁盘型号
+- 现有默认 `inspect` CLI 输出核心字段不回归
 - `cmake --build build` 通过
 - `ctest --test-dir build -C Debug --output-on-failure` 通过
 - 相关文档同步更新并保持 `mkdocs build --strict` 通过
 
-### 待审查问题
+### 审查后批准的实现版本
 
-在真正开始实现前，希望先确认以下方向是否接受：
+以下方向作为进入实现阶段前的最终版本：
 
-1. 是否认可“下一步先做设备能力探测与擦除路径解释器，而不是直接做设备级执行”？
-2. 是否接受继续复用 `inspect`，并用 `--detail` 一类模式承载新增输出，而不是新增独立子命令？
-3. 是否接受本阶段对 macOS 先保守回退为 `Unknown / Restricted`，优先把 Windows / Linux 做扎实？
-4. 是否接受保留现有 `StrategyRecommendation`，再增量添加更细粒度的 `EraseMethod` / `DeviceCapabilities`，而不是重写现有 recommendation 体系？
+1. 先做“设备能力探测 + 擦除路径解释器”的非破坏性增强，而不是直接做设备级执行。
+2. 继续复用 `inspect`，新增 `--detail` 模式承载新增输出。
+3. phase 1 对 macOS 保守回退为 `Unknown / Restricted`，优先把 Windows / Linux 做扎实。
+4. 保留现有 `StrategyRecommendation`，增量添加 `DeviceCapabilities` 与 `ErasePathAdvice`，不重写现有 recommendation 体系。
