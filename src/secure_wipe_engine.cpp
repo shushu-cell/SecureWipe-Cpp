@@ -30,16 +30,16 @@ SecureWipeFacade::SecureWipeFacade(OperationReporter& reporter)
       directory_wiper_{inspector_, file_wiper_, reporter} {
 }
 
-InspectionReport SecureWipeFacade::inspect(const std::string& path) const {
+InspectionReport SecureWipeFacade::inspect(std::string_view path) const {
     return inspector_.inspect(path);
 }
 
-WipeResult SecureWipeFacade::wipe_file(const std::string& path, const WipeOptions& options) const {
+WipeResult SecureWipeFacade::wipe_file(std::string_view path, const WipeOptions& options) const {
     return file_wiper_.wipe(path, options);
 }
 
 WipeResult SecureWipeFacade::wipe_directory(
-    const std::string& path,
+    std::string_view path,
     const WipeOptions& options,
     bool dry_run,
     bool yes) const {

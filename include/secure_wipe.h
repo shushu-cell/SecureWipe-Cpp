@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace securewipe {
@@ -63,7 +64,7 @@ struct [[nodiscard]] InspectionReport {
     std::vector<std::string> warnings;
 };
 
-[[nodiscard]] InspectionReport inspect_target(const std::string& path);
-[[nodiscard]] WipeResult wipe_file(const std::string& path, const WipeOptions& opt);
-[[nodiscard]] WipeResult wipe_directory(const std::string& dir, const WipeOptions& opt, bool dry_run, bool yes);
+[[nodiscard]] InspectionReport inspect_target(std::string_view path);
+[[nodiscard]] WipeResult wipe_file(std::string_view path, const WipeOptions& opt);
+[[nodiscard]] WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry_run, bool yes);
 } // namespace securewipe

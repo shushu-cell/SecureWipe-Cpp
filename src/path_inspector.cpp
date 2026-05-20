@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <system_error>
 
@@ -58,7 +59,7 @@ std::optional<MountEntry> find_best_mount_entry(const fs::path& resolved) {
 }
 #endif
 
-std::string decode_mount_field(std::string value) {
+std::string decode_mount_field(std::string_view value) {
     std::string result;
     result.reserve(value.size());
     for (std::size_t index = 0; index < value.size(); ++index) {
@@ -73,13 +74,13 @@ std::string decode_mount_field(std::string value) {
 }
 
 #if defined(_WIN32)
-std::string wide_to_utf8(const std::wstring& value) {
+std::string wide_to_utf8(std::wstring_view value) {
     if (value.empty()) return {};
 
     const int required_size = WideCharToMultiByte(
         CP_UTF8,
         0,
-        value.c_str(),
+        value.data(),
         static_cast<int>(value.size()),
         nullptr,
         0,
@@ -91,7 +92,7 @@ std::string wide_to_utf8(const std::wstring& value) {
     const int converted_size = WideCharToMultiByte(
         CP_UTF8,
         0,
-        value.c_str(),
+        value.data(),
         static_cast<int>(value.size()),
         converted.data(),
         required_size,
@@ -105,8 +106,8 @@ std::string wide_to_utf8(const std::wstring& value) {
 
 } // namespace
 
-InspectionReport PathInspector::inspect(const std::string& path) const {
-    return inspect(fs::path(path));
+InspectionReport PathInspector::inspect(std::string_view path) const {
+    return inspect(path_from_view(path));
 }
 
 InspectionReport PathInspector::inspect(const fs::path& path) const {
@@ -309,7 +310,7 @@ bool PathInspector::is_dangerous_directory(const fs::path& path) {
         "ProgramFiles",
         "ProgramFiles(x86)",
     };
-    return std::any_of(dangerous_environment_roots.begin(), dangerous_environment_roots.end(), [&resolved](const char* variable_name) {
+    return std::ranges::any_of(dangerous_environment_roots, [&resolved](const char* variable_name) {
         const std::string environment_path = environment_value(variable_name);
         return !environment_path.empty() && paths_equal(resolved, fs::path(environment_path));
     });
@@ -319,7 +320,7 @@ bool PathInspector::is_dangerous_directory(const fs::path& path) {
         fs::path("/Library"),
         fs::path("/Applications"),
     };
-    if (std::any_of(dangerous_paths.begin(), dangerous_paths.end(), [&resolved](const fs::path& dangerous_path) {
+    if (std::ranges::any_of(dangerous_paths, [&resolved](const fs::path& dangerous_path) {
             return resolved == dangerous_path;
         })) {
         return true;

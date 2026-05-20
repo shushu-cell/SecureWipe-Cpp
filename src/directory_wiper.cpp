@@ -4,10 +4,10 @@ namespace securewipe::detail {
 
 namespace {
 
-WipeResult make_error_result(std::string message, bool dry_run = false) {
+WipeResult make_error_result(std::string_view message, bool dry_run = false) {
     WipeResult result;
     result.dry_run = dry_run;
-    result.message = std::move(message);
+    result.message = message;
     return result;
 }
 
@@ -22,7 +22,7 @@ DirectoryWiper::DirectoryWiper(
       reporter_(reporter) {
 }
 
-WipeResult DirectoryWiper::wipe(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const {
+WipeResult DirectoryWiper::wipe(std::string_view path, const WipeOptions& options, bool dry_run, bool yes) const {
     const InspectionReport inspection = inspector_.inspect(path);
     if (!inspection.ok) {
         return make_error_result(inspection.message, dry_run);
@@ -42,7 +42,7 @@ WipeResult DirectoryWiper::wipe(const std::string& path, const WipeOptions& opti
             dry_run);
     }
 
-    const DirectoryScan scan_result = scan(fs::path(path));
+    const DirectoryScan scan_result = scan(path_from_view(path));
 
     WipeResult result;
     result.dry_run = dry_run;

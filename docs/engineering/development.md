@@ -3,7 +3,7 @@
 ## 环境要求
 
 - CMake 3.21+
-- C++17 编译器
+- C++20 编译器
 - Windows、Linux 或 macOS 开发环境
 - Python 3，用于文档构建
 

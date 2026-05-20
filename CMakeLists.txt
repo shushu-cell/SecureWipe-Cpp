@@ -5,7 +5,7 @@ project(SecureWipeCpp VERSION 0.1.0 LANGUAGES CXX)
 include(CTest)
 include(GNUInstallDirs)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -30,7 +30,7 @@ target_include_directories(securewipe_lib
 		${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_compile_features(securewipe_lib PUBLIC cxx_std_17)
+target_compile_features(securewipe_lib PUBLIC cxx_std_20)
 
 if(MSVC)
 	target_compile_options(securewipe_lib PRIVATE /W4 /permissive-)

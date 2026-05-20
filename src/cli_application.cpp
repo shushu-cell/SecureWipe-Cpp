@@ -28,9 +28,7 @@ template <typename Enum, std::size_t LabelCount>
 constexpr std::string_view enum_label_or_unknown(
     Enum value,
     const std::array<EnumLabel<Enum>, LabelCount>& labels) noexcept {
-    const auto entry = std::find_if(labels.begin(), labels.end(), [value](const auto& candidate) {
-        return candidate.value == value;
-    });
+    const auto entry = std::ranges::find(labels, value, &EnumLabel<Enum>::value);
 
     return entry != labels.end() ? entry->label : "unknown"sv;
 }
@@ -93,7 +91,7 @@ std::string select_help(
         std::cref(wipe_directory_command),
     };
 
-    const auto selected_command = std::find_if(help_selection_order.begin(), help_selection_order.end(), [](const auto& command) {
+    const auto selected_command = std::ranges::find_if(help_selection_order, [](const auto& command) {
         return command.get().parsed();
     });
 
@@ -190,7 +188,7 @@ CommandLineApplication::ParseResult CommandLineApplication::parse(const std::vec
         std::pair{std::cref(*wipe_directory_command), CommandKind::WipeDirectory},
     };
 
-    const auto selected_command = std::find_if(command_bindings.begin(), command_bindings.end(), [](const auto& binding) {
+    const auto selected_command = std::ranges::find_if(command_bindings, [](const auto& binding) {
         return binding.first.get().parsed();
     });
 

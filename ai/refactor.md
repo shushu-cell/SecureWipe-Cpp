@@ -248,3 +248,74 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `cmake --build build`
 - `ctest --test-dir build -C Debug --output-on-failure`
 - 结果：构建通过，7 个测试全部通过。
+
+## 2026-05-20 C++20 / `string_view` 类型级重构
+
+### 评估目标
+
+- 逐文件检查 `src/` 下哪些 `std::string` 参数其实只承担“只读视图”语义。
+- 逐处评估 `const char*` 是否只是历史遗留，还是仍然被 C/C++ 运行时 API 要求为 null-terminated 输入。
+- 在不牺牲路径语义和结果对象所有权语义的前提下，将项目升级到 C++20，并只在有明显收益的地方引入 `std::string_view` 与 `std::ranges`。
+
+### 标准选择结论
+
+- 本轮显式将项目标准从 C++17 提升到 C++20。
+- 原因不是为了追新，而是当前需求已经明确要求采用 `>= C++20`，并且本轮确实落地了两类适合 C++20 的改进：
+	- 路径与错误前缀这类只读文本参数改用 `std::string_view`
+	- 纯查找 / 纯匹配 helper 改用 `std::ranges` 表达意图
+
+### 已实施重构
+
+#### 构建与标准
+
+- `CMakeLists.txt`：`CMAKE_CXX_STANDARD` 与 `target_compile_features` 从 17 升到 20。
+
+#### 公共与内部路径参数
+
+- `include/secure_wipe.h`：顶层 API `inspect_target(...)`、`wipe_file(...)`、`wipe_directory(...)` 的路径参数改为 `std::string_view`。
+- `src/internal/secure_wipe_engine.h`：`PathInspector`、`FileWiper`、`DirectoryWiper`、`SecureWipeFacade` 的对应只读路径参数同步改为 `std::string_view`。
+- 新增 `path_from_view(...)` 内部 helper，把视图参数在真正进入文件系统逻辑之前统一转换为 `fs::path`。
+
+#### 错误消息与只读文本
+
+- `src/native_file.cpp` / `src/internal/secure_wipe_engine.h`：
+	- `NativeFile::open_error()` 改为返回 `std::string_view`
+	- `NativeFile::last_error(...)` 的前缀参数改为 `std::string_view`
+- `src/file_wiper.cpp`：
+	- `validate_options(...)` 改为返回 `std::string_view`，因为它只返回静态错误文案
+	- `success_message(...)` 改为返回 `std::string_view`，因为它只在两条固定成功文案之间选择
+- `src/directory_wiper.cpp` / `src/file_wiper.cpp`：局部 `make_error_result(...)` 改为接收 `std::string_view`，在结果对象中复制为拥有型 `std::string`
+
+#### C++20 ranges
+
+- `src/cli_application.cpp`：
+	- `enum_label_or_unknown(...)` 改为 `std::ranges::find(..., projection)`，直接表达“按枚举值查标签”
+	- `select_help(...)` 与 `parse(...)` 中的纯选择逻辑改为 `std::ranges::find_if(...)`
+- `src/path_inspector.cpp`：危险目录判定改为 `std::ranges::any_of(...)`
+
+### 明确保留原状的类型与理由
+
+#### 仍保留 `std::string` 的地方
+
+- `InspectionReport` 与 `WipeResult` 的字符串字段：它们是跨函数返回值，必须拥有自身存储，不能暴露悬垂 view 风险。
+- `CommandRequest::path`：CLI11 解析过程需要写入一个拥有型字符串，之后再把它以 view 形式传入领域层最合适。
+- 任何需要拼接、构造或持久保存错误消息的返回值：最终都继续落在拥有型 `std::string` 上。
+
+#### 仍保留 `const char*` 的地方
+
+- `main(int argc, char* argv[])`：这是 C/C++ 程序入口约定，不应“为了现代化”改变 ABI 语义。
+- `PathInspector::environment_value(const char* name)`：底层使用 `_dupenv_s` / `std::getenv`，需要 null-terminated C 字符串。
+- 这类位置不是“忘了改成 `string_view`”，而是经过评估后刻意保留。
+
+### 本轮结论
+
+- 适合替换为 `std::string_view` 的，是“只读输入、函数内立即消费、不跨边界持有”的文本参数。
+- 不适合替换的，是“结果对象字段、CLI 可变存储、C API null-terminated 输入、文件系统拥有型路径对象”。
+- 因此，本轮不是机械地把所有 `std::string` 都换成 view，而是按语义区分“视图”和“所有权”。
+
+### 验证
+
+- `cmake -B build -S .`
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- 结果：配置通过、完整编译通过、7 个测试全部通过。

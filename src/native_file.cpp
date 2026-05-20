@@ -58,7 +58,7 @@ bool NativeFile::is_open() const noexcept {
     return handle_ != nullptr;
 }
 
-const std::string& NativeFile::open_error() const noexcept {
+std::string_view NativeFile::open_error() const noexcept {
     return open_error_;
 }
 
@@ -108,7 +108,7 @@ std::string NativeFile::close() {
     return {};
 }
 
-std::string NativeFile::last_error(const char* prefix) {
+std::string NativeFile::last_error(std::string_view prefix) {
 #if defined(_WIN32)
     char buffer[256] = {};
     strerror_s(buffer, sizeof(buffer), errno);

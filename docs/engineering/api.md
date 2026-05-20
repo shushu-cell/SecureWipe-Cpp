@@ -11,10 +11,12 @@
 ## 顶层函数
 
 ```cpp
-InspectionReport inspect_target(const std::string& path);
-WipeResult wipe_file(const std::string& path, const WipeOptions& opt);
-WipeResult wipe_directory(const std::string& dir, const WipeOptions& opt, bool dry_run, bool yes);
+InspectionReport inspect_target(std::string_view path);
+WipeResult wipe_file(std::string_view path, const WipeOptions& opt);
+WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry_run, bool yes);
 ```
+
+当前公共 API 将路径参数声明为 `std::string_view`。这表示调用方可以传入 `std::string`、字符串字面量或其他只读字符串视图，而领域层在真正进入文件系统操作前再把它转换为 `std::filesystem::path`。
 
 ## 值类型
 

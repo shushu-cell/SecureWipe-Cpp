@@ -6,13 +6,13 @@ namespace securewipe::detail {
 
 namespace {
 
-WipeResult make_error_result(std::string message) {
+WipeResult make_error_result(std::string_view message) {
     WipeResult result;
-    result.message = std::move(message);
+    result.message = message;
     return result;
 }
 
-std::string validate_options(const WipeOptions& options) {
+std::string_view validate_options(const WipeOptions& options) {
     if (options.passes < 1) {
         return "passes must be >= 1";
     }
@@ -30,8 +30,8 @@ FileWiper::FileWiper(const PathInspector& inspector)
     : inspector_(inspector) {
 }
 
-WipeResult FileWiper::wipe(const std::string& path, const WipeOptions& options) const {
-    return wipe(fs::path(path), options);
+WipeResult FileWiper::wipe(std::string_view path, const WipeOptions& options) const {
+    return wipe(path_from_view(path), options);
 }
 
 WipeResult FileWiper::wipe(const fs::path& path, const WipeOptions& options) const {
@@ -44,7 +44,7 @@ WipeResult FileWiper::wipe(const fs::path& path, const WipeOptions& options) con
         return make_error_result("Path is not a regular file");
     }
 
-    if (const std::string options_error = validate_options(options); !options_error.empty()) {
+    if (const auto options_error = validate_options(options); !options_error.empty()) {
         return make_error_result(options_error);
     }
 
@@ -155,7 +155,7 @@ bool FileWiper::obscure_name_best_effort(fs::path& path) {
     return false;
 }
 
-std::string FileWiper::success_message(const InspectionReport& report) {
+std::string_view FileWiper::success_message(const InspectionReport& report) {
     if (report.recommendation == StrategyRecommendation::ReviewBeforeWipe) {
         return "Wiped and deleted successfully (best-effort only; inspect warnings for media caveats)";
     }

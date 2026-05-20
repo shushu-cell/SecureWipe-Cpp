@@ -72,7 +72,7 @@ flowchart TB
 |---|---|---|
 | NFR-01 | 安全优先 | 默认拒绝危险目录和符号链接，不把文件级覆盖表述为绝对安全 |
 | NFR-02 | 可维护性 | 公共 API、CLI 层和内部引擎分层，私有头限制在 `src/internal/` |
-| NFR-03 | 可移植性 | 使用 C++17、CMake、CLI11，支持 Windows / Linux / macOS 开发流程 |
+| NFR-03 | 可移植性 | 使用 C++20、CMake、CLI11，支持 Windows / Linux / macOS 开发流程 |
 | NFR-04 | 可测试性 | 使用 CTest 覆盖 inspect、wipe、wipe-dir 和 CLI 参数回归 |
 | NFR-05 | 可文档化 | 使用 MkDocs Material 维护 docs-as-code，并通过 `mkdocs build --strict` 校验 |
 | NFR-06 | 可重复构建 | 将 CLI11 vendored 到仓库，避免构建过程依赖运行时下载第三方库 |

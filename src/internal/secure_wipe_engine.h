@@ -14,6 +14,10 @@ namespace securewipe::detail {
 
 namespace fs = std::filesystem;
 
+[[nodiscard]] inline fs::path path_from_view(std::string_view path) {
+    return fs::path(path.begin(), path.end());
+}
+
 struct DirectoryScan {
     std::vector<fs::path> files;
     std::vector<fs::path> directories;
@@ -47,7 +51,7 @@ private:
 
 class PathInspector final {
 public:
-    [[nodiscard]] InspectionReport inspect(const std::string& path) const;
+    [[nodiscard]] InspectionReport inspect(std::string_view path) const;
     [[nodiscard]] InspectionReport inspect(const fs::path& path) const;
     [[nodiscard]] fs::path resolve_path(const fs::path& path) const;
 
@@ -73,14 +77,14 @@ public:
     NativeFile& operator=(NativeFile&& other) noexcept;
 
     [[nodiscard]] bool is_open() const noexcept;
-    [[nodiscard]] const std::string& open_error() const noexcept;
+    [[nodiscard]] std::string_view open_error() const noexcept;
     [[nodiscard]] std::string seek_to_start();
     [[nodiscard]] std::string write(const unsigned char* buffer, std::size_t size);
     [[nodiscard]] std::string flush();
     [[nodiscard]] std::string close();
 
 private:
-    static std::string last_error(const char* prefix);
+    static std::string last_error(std::string_view prefix);
     std::FILE* handle_ = nullptr;
     std::string open_error_;
 };
@@ -89,7 +93,7 @@ class FileWiper final {
 public:
     explicit FileWiper(const PathInspector& inspector);
 
-    [[nodiscard]] WipeResult wipe(const std::string& path, const WipeOptions& options) const;
+    [[nodiscard]] WipeResult wipe(std::string_view path, const WipeOptions& options) const;
     [[nodiscard]] WipeResult wipe(const fs::path& path, const WipeOptions& options) const;
 
 private:
@@ -100,7 +104,7 @@ private:
         Pattern pattern,
         std::mt19937_64& rng);
     static bool obscure_name_best_effort(fs::path& path);
-    static std::string success_message(const InspectionReport& report);
+    static std::string_view success_message(const InspectionReport& report);
 
     const PathInspector& inspector_;
 };
@@ -112,7 +116,7 @@ public:
         const FileWiper& file_wiper,
         OperationReporter& reporter);
 
-    [[nodiscard]] WipeResult wipe(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
+    [[nodiscard]] WipeResult wipe(std::string_view path, const WipeOptions& options, bool dry_run, bool yes) const;
 
 private:
     [[nodiscard]] DirectoryScan scan(const fs::path& root) const;
@@ -127,9 +131,9 @@ class SecureWipeFacade final {
 public:
     explicit SecureWipeFacade(OperationReporter& reporter);
 
-    [[nodiscard]] InspectionReport inspect(const std::string& path) const;
-    [[nodiscard]] WipeResult wipe_file(const std::string& path, const WipeOptions& options) const;
-    [[nodiscard]] WipeResult wipe_directory(const std::string& path, const WipeOptions& options, bool dry_run, bool yes) const;
+    [[nodiscard]] InspectionReport inspect(std::string_view path) const;
+    [[nodiscard]] WipeResult wipe_file(std::string_view path, const WipeOptions& options) const;
+    [[nodiscard]] WipeResult wipe_directory(std::string_view path, const WipeOptions& options, bool dry_run, bool yes) const;
 
 private:
     PathInspector inspector_;
