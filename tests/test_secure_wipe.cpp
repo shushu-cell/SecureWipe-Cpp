@@ -1,10 +1,14 @@
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
+#include "src/internal/cli_application.h"
 #include "secure_wipe.h"
 
 namespace fs = std::filesystem;
@@ -47,6 +51,28 @@ void write_text_file(const fs::path& path, const std::string& contents) {
     output << contents;
 }
 
+std::string read_field_value(const std::string& report, std::string_view field_name) {
+    const std::string prefix = std::string(field_name) + ": ";
+    const auto line_begin = report.find(prefix);
+    if (line_begin == std::string::npos) {
+        throw std::runtime_error("Missing report field: " + std::string(field_name));
+    }
+
+    const auto value_begin = line_begin + prefix.size();
+    const auto line_end = report.find('\n', value_begin);
+    return report.substr(value_begin, line_end == std::string::npos ? std::string::npos : line_end - value_begin);
+}
+
+bool matches_any(std::string_view value, std::initializer_list<std::string_view> candidates) {
+    for (const auto candidate : candidates) {
+        if (value == candidate) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void test_inspect_regular_file() {
     TempDir temp;
     const fs::path file = temp.path() / "sample.txt";
@@ -68,6 +94,51 @@ void test_inspect_missing_path() {
             "missing paths should keep the default target kind");
     require(report.message == "Path does not exist", "missing path message should be explicit");
 }
+
+    void test_cli_inspect_reports_stable_labels() {
+        TempDir temp;
+        const fs::path file = temp.path() / "sample.txt";
+        write_text_file(file, "secret");
+
+        std::ostringstream output;
+        std::ostringstream error_output;
+        securewipe::app::CommandLineApplication application(output, error_output);
+
+        const int exit_code = application.run({"inspect", file.string()});
+        require(exit_code == 0, "CLI inspect should succeed for a regular file");
+        require(error_output.str().empty(), "CLI inspect should not emit stderr on success");
+
+        const std::string report = output.str();
+        require(read_field_value(report, "target-kind") == "regular-file",
+            "CLI inspect should render TargetKind::RegularFile with a stable label");
+
+        const std::string storage_kind = read_field_value(report, "storage-kind");
+        require(matches_any(storage_kind,
+                {"unknown", "fixed-disk", "rotational-disk", "solid-state", "removable-disk", "network-share"}),
+            "CLI inspect should render storage kinds using the supported label set");
+
+        const std::string recommendation = read_field_value(report, "recommendation");
+        require(matches_any(recommendation,
+                {"best-effort-file-overwrite", "review-before-wipe", "refuse"}),
+            "CLI inspect should render recommendations using the supported label set");
+    }
+
+    void test_cli_inspect_refusal_uses_refuse_label() {
+        std::ostringstream output;
+        std::ostringstream error_output;
+        securewipe::app::CommandLineApplication application(output, error_output);
+
+        const fs::path root = fs::current_path().root_path();
+        const int exit_code = application.run({"inspect", root.string()});
+        require(exit_code == 2, "CLI inspect should reject dangerous root targets");
+        require(error_output.str().empty(), "CLI inspect should print refusal reports to stdout, not stderr");
+
+        const std::string report = output.str();
+        require(read_field_value(report, "target-kind") == "directory",
+            "CLI inspect should render root paths as directories");
+        require(read_field_value(report, "recommendation") == "refuse",
+            "CLI inspect should render StrategyRecommendation::Refuse with a stable label");
+    }
 
 void test_wipe_file_removes_target() {
     TempDir temp;
@@ -164,6 +235,8 @@ int main() {
     try {
         test_inspect_regular_file();
         test_inspect_missing_path();
+        test_cli_inspect_reports_stable_labels();
+        test_cli_inspect_refusal_uses_refuse_label();
         test_wipe_file_removes_target();
         test_wipe_file_rejects_zero_block_size();
         test_wipe_directory_dry_run_preserves_files();

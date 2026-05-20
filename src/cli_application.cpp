@@ -1,12 +1,62 @@
 #include "internal/cli_application.h"
 
+#include <array>
 #include <charconv>
 #include <ostream>
 #include <string_view>
+#include <utility>
 
 namespace securewipe::app {
 
 using namespace std::literals;
+
+namespace {
+
+template <typename Enum>
+struct EnumLabel {
+    Enum value;
+    std::string_view label;
+};
+
+template <typename Enum, std::size_t LabelCount>
+constexpr std::string_view enum_label_or_unknown(
+    Enum value,
+    const std::array<EnumLabel<Enum>, LabelCount>& labels) noexcept {
+    for (const auto& entry : labels) {
+        if (entry.value == value) {
+            return entry.label;
+        }
+    }
+
+    return "unknown"sv;
+}
+
+constexpr std::array<EnumLabel<TargetKind>, 5> kTargetKindLabels{{
+    {TargetKind::Missing, "missing"sv},
+    {TargetKind::RegularFile, "regular-file"sv},
+    {TargetKind::Directory, "directory"sv},
+    {TargetKind::Symlink, "symlink"sv},
+    {TargetKind::Other, "other"sv},
+}};
+
+constexpr std::array<EnumLabel<StorageKind>, 6> kStorageKindLabels{{
+    {StorageKind::Unknown, "unknown"sv},
+    {StorageKind::FixedDisk, "fixed-disk"sv},
+    {StorageKind::RotationalDisk, "rotational-disk"sv},
+    {StorageKind::SolidState, "solid-state"sv},
+    {StorageKind::RemovableDisk, "removable-disk"sv},
+    {StorageKind::NetworkShare, "network-share"sv},
+}};
+
+constexpr std::array<EnumLabel<StrategyRecommendation>, 5> kRecommendationLabels{{
+    {StrategyRecommendation::None, "none"sv},
+    {StrategyRecommendation::Refuse, "refuse"sv},
+    {StrategyRecommendation::BestEffortFileOverwrite, "best-effort-file-overwrite"sv},
+    {StrategyRecommendation::BestEffortDirectoryWipe, "best-effort-directory-wipe"sv},
+    {StrategyRecommendation::ReviewBeforeWipe, "review-before-wipe"sv},
+}};
+
+} // namespace
 
 CommandLineApplication::CommandLineApplication(std::ostream& output, std::ostream& error_output)
     : output_(output), error_output_(error_output) {
@@ -180,54 +230,16 @@ bool CommandLineApplication::try_parse_pattern(std::string_view text, Pattern& p
     return false;
 }
 
-const char* CommandLineApplication::to_string(TargetKind kind) {
-    switch (kind) {
-    case TargetKind::Missing:
-        return "missing";
-    case TargetKind::RegularFile:
-        return "regular-file";
-    case TargetKind::Directory:
-        return "directory";
-    case TargetKind::Symlink:
-        return "symlink";
-    case TargetKind::Other:
-        return "other";
-    }
-    return "unknown";
+std::string_view CommandLineApplication::to_string(TargetKind kind) noexcept {
+    return enum_label_or_unknown(kind, kTargetKindLabels);
 }
 
-const char* CommandLineApplication::to_string(StorageKind kind) {
-    switch (kind) {
-    case StorageKind::Unknown:
-        return "unknown";
-    case StorageKind::FixedDisk:
-        return "fixed-disk";
-    case StorageKind::RotationalDisk:
-        return "rotational-disk";
-    case StorageKind::SolidState:
-        return "solid-state";
-    case StorageKind::RemovableDisk:
-        return "removable-disk";
-    case StorageKind::NetworkShare:
-        return "network-share";
-    }
-    return "unknown";
+std::string_view CommandLineApplication::to_string(StorageKind kind) noexcept {
+    return enum_label_or_unknown(kind, kStorageKindLabels);
 }
 
-const char* CommandLineApplication::to_string(StrategyRecommendation recommendation) {
-    switch (recommendation) {
-    case StrategyRecommendation::None:
-        return "none";
-    case StrategyRecommendation::Refuse:
-        return "refuse";
-    case StrategyRecommendation::BestEffortFileOverwrite:
-        return "best-effort-file-overwrite";
-    case StrategyRecommendation::BestEffortDirectoryWipe:
-        return "best-effort-directory-wipe";
-    case StrategyRecommendation::ReviewBeforeWipe:
-        return "review-before-wipe";
-    }
-    return "unknown";
+std::string_view CommandLineApplication::to_string(StrategyRecommendation recommendation) noexcept {
+    return enum_label_or_unknown(recommendation, kRecommendationLabels);
 }
 
 int CommandLineApplication::run_inspect(const CommandRequest& request) const {

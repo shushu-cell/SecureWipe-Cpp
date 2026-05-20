@@ -52,9 +52,9 @@ private:
     static void write_field(std::ostream& output, std::string_view key, std::string_view value);
     static bool try_parse_positive_int(std::string_view text, int& value);
     static bool try_parse_pattern(std::string_view text, Pattern& pattern);
-    static const char* to_string(TargetKind kind);
-    static const char* to_string(StorageKind kind);
-    static const char* to_string(StrategyRecommendation recommendation);
+    [[nodiscard]] static std::string_view to_string(TargetKind kind) noexcept;
+    [[nodiscard]] static std::string_view to_string(StorageKind kind) noexcept;
+    [[nodiscard]] static std::string_view to_string(StrategyRecommendation recommendation) noexcept;
 
     int run_inspect(const CommandRequest& request) const;
     int run_wipe_file(const CommandRequest& request) const;
