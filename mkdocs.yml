@@ -46,6 +46,8 @@ nav:
   - 使用指南:
       - CLI 使用: guide/cli.md
       - 安全边界: guide/safety.md
+  - 技术文档:
+      - 安全擦除算法: technical/secure-erasure-algorithms.md
   - 工程文档:
       - 需求分析: engineering/requirements.md
       - 系统架构: engineering/architecture.md

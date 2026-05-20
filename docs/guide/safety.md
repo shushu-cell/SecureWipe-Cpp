@@ -52,3 +52,5 @@
 - 对 boot disk 的专用擦除流程
 
 如果未来引入这些能力，文档页和 CLI 帮助都必须同步更新。
+
+关于当前版本已经采用的路径检查、文件覆盖、目录递归与 recommendation 推导算法，请继续参见[安全擦除算法技术文档](../technical/secure-erasure-algorithms.md)。
