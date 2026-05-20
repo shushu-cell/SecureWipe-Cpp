@@ -9,6 +9,7 @@
 这意味着本页主要讨论四类算法与策略：
 
 - 破坏性操作前的路径检查与风险分级
+- 非破坏性的设备能力探测与擦除路径解释
 - 单文件覆盖、刷新、截断、重命名与删除工作流
 - 目录递归扫描、dry-run 和批量聚合工作流
 - 介质类型推断与 recommendation 生成逻辑
@@ -62,6 +63,28 @@
 6. 结合目标类型、介质类型和危险度生成 `StrategyRecommendation` 与 warning 列表。
 
 这一算法的作用不是“更聪明地删除”，而是**在删除前先把不能删、暂不该删、只能 best-effort 删除的情况显式暴露出来**。
+
+### 设备能力探测与擦除路径解释算法
+
+当前版本已经把 `inspect` 扩展为一个三段式流程：
+
+1. `PathInspector` 先生成基础 `InspectionReport`。
+2. `DeviceCapabilityInspector` 再通过只读平台探测补入 `DeviceCapabilities`。
+3. `ErasePathAdvisor` 基于基础 recommendation 与能力快照生成 `ErasePathAdvice`。
+
+当前平台策略是：
+
+- Windows：通过 `IOCTL_STORAGE_QUERY_PROPERTY`、`STORAGE_DEVICE_DESCRIPTOR` 和 `DEVICE_TRIM_DESCRIPTOR` 收集 bus type、可移动介质线索和 trim/discard 线索
+- Linux：通过 `/proc/self/mounts` 与 `/sys/class/block/...` 推断块设备、可移动状态、discard 能力和总线形态
+- macOS / 其他平台：当前保守回退为 `Unknown` / `Restricted` 风格的能力结论
+
+这里的关键不是“多探测几个字段”，而是把**推断**与**确认**明确分开：
+
+- `DeviceBusKind` 只表示总线或设备形态级别线索
+- `CapabilityState` 强制区分 `Unknown / Unsupported / Supported / Restricted`
+- `EraseMethod` 当前只表达“更适合 review 哪条路径”，不表达 destructive device command 已可执行
+
+因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。
 
 ### 单文件安全擦除工作流
 
@@ -140,7 +163,7 @@ flowchart TD
 |---|---|---|
 | Gutmann / DoD 多模式覆盖 | 未采用 | 现代介质上“覆盖图案越多越安全”的收益并不稳定，反而增加实现与解释负担。 |
 | 空闲空间覆盖 | 未采用 | 风险高、系统扰动大、文件系统边界复杂，当前版本先聚焦路径明确的文件/目录目标。 |
-| ATA / NVMe 设备级 sanitization | 未采用 | 需要独立的设备探测、权限模型、透传命令与验证链路，已经超出当前工程边界。 |
+| ATA / NVMe 设备级 sanitization 执行 | 未采用 | 当前版本只实现了非破坏性的能力探测与路径解释，还没有进入 destructive command 执行与验证链路。 |
 | Crypto-erase / PSID revert | 未采用 | 依赖设备或全盘加密能力，必须与设备模型和证据输出一起设计，不能临时拼接到当前文件级流程上。 |
 | 取证级验证报告 | 未采用 | 当前缺乏设备状态日志、抽样验证和证书模型，不能把 CLI 输出冒充成审计证据。 |
 
@@ -151,6 +174,8 @@ flowchart TD
 | 算法职责 | 公共入口 | 主要实现位置 | 说明 |
 |---|---|---|---|
 | 路径检查与 recommendation | `inspect_target(...)` | `src/path_inspector.cpp` | 生成 `InspectionReport`，是所有破坏性操作前的安全入口。 |
+| 设备能力探测 | `inspect_target(...)` | `src/device_capability_inspector.cpp` | 通过只读平台探测补入 `DeviceCapabilities`。 |
+| 擦除路径解释 | `inspect_target(...)` | `src/erase_path_advisor.cpp` | 基于 recommendation 与能力快照生成 `ErasePathAdvice`。 |
 | 单文件擦除 | `wipe_file(...)` | `src/file_wiper.cpp` + `src/native_file.cpp` | 负责覆盖、刷新、截断、改名和删除。 |
 | 目录擦除 | `wipe_directory(...)` | `src/directory_wiper.cpp` | 负责扫描、dry-run、聚合和目录清理。 |
 | 公共 API 到内部引擎的转发 | `include/secure_wipe.h` + `src/secure_wipe.cpp` | `src/secure_wipe.cpp` | 通过 facade 组合内部对象，而不是把算法细节暴露到公共头文件。 |
@@ -162,6 +187,8 @@ flowchart TD
 | `src/path_inspector.cpp` | `PathInspector::inspect` | 组合目标类型判断、危险路径判定、warning 生成与 recommendation 推导。 |
 | `src/path_inspector.cpp` | `PathInspector::detect_storage_kind` | 负责给出 HDD/SSD/可移动盘/网络盘等粗粒度介质线索。 |
 | `src/path_inspector.cpp` | `PathInspector::is_dangerous_directory` | 保护根目录、主目录和系统目录等高风险路径。 |
+| `src/device_capability_inspector.cpp` | `SystemDeviceCapabilityProbe::probe` / `DeviceCapabilityInspector::inspect` | 负责只读设备探测、bus kind 推断、trim/discard 线索读取和能力状态映射。 |
+| `src/erase_path_advisor.cpp` | `ErasePathAdvisor::advise` | 负责把粗粒度 recommendation 提升为更细粒度的路径建议与理由文本。 |
 | `src/file_wiper.cpp` | `FileWiper::wipe` | 实现单文件主流程：检查、覆盖、刷新、截断、删除。 |
 | `src/file_wiper.cpp` | `FileWiper::fill_buffer` | 具体生成零填充或随机填充块。 |
 | `src/file_wiper.cpp` | `FileWiper::obscure_name_best_effort` | 尝试用占位文件名替换原有文件名。 |
@@ -212,7 +239,7 @@ flowchart TD
 
 若项目未来目标提升到“设备感知、可验证的 sanitization 工具”，建议下一阶段按以下方向扩展，而不是继续堆叠文件级覆盖花样：
 
-1. 引入独立的设备能力探测层，区分 HDD、SATA SSD、NVMe、USB 桥接等场景。
+1. 在现有独立设备能力探测层之上继续细化结构化证据输出，而不是把证据重新折叠回自由文本。
 2. 为 ATA / NVMe 设备级清除建立单独的命令执行与状态验证路径。
 3. 将验证与报告作为一等能力，输出比“命令执行成功”更强的证据。
 4. 若继续研究文件级 SSD 安全删除，应优先关注 crash consistency、crypto-delete 和设备黑盒假设下的可证性问题。

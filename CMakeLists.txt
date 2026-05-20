@@ -17,7 +17,9 @@ target_include_directories(CLI11 SYSTEM INTERFACE
 )
 
 add_library(securewipe_lib STATIC
+	src/device_capability_inspector.cpp
 	src/directory_wiper.cpp
+	src/erase_path_advisor.cpp
 	src/file_wiper.cpp
 	src/native_file.cpp
 	src/path_inspector.cpp

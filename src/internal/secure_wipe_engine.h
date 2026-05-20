@@ -23,6 +23,14 @@ struct DirectoryScan {
     std::vector<fs::path> directories;
 };
 
+struct DeviceProbeSnapshot {
+    DeviceBusKind bus_kind = DeviceBusKind::Unknown;
+    CapabilityState trim_support = CapabilityState::Unknown;
+    bool is_removable_media = false;
+    bool usb_bridge_suspected = false;
+    std::vector<std::string> evidence;
+};
+
 class OperationReporter {
 public:
     virtual ~OperationReporter() = default;
@@ -49,6 +57,18 @@ private:
     std::ostream& error_output_;
 };
 
+class DeviceCapabilityProbe {
+public:
+    virtual ~DeviceCapabilityProbe() = default;
+
+    [[nodiscard]] virtual DeviceProbeSnapshot probe(const fs::path& path, StorageKind storage_kind) const = 0;
+};
+
+class SystemDeviceCapabilityProbe final : public DeviceCapabilityProbe {
+public:
+    [[nodiscard]] DeviceProbeSnapshot probe(const fs::path& path, StorageKind storage_kind) const override;
+};
+
 class PathInspector final {
 public:
     [[nodiscard]] InspectionReport inspect(std::string_view path) const;
@@ -64,6 +84,21 @@ private:
     static StorageKind detect_storage_kind(const fs::path& path);
     static bool is_dangerous_directory(const fs::path& path);
     static bool is_probably_ssd_unsafe(StorageKind storage_kind) noexcept;
+};
+
+class DeviceCapabilityInspector final {
+public:
+    explicit DeviceCapabilityInspector(const DeviceCapabilityProbe& probe) noexcept;
+
+    [[nodiscard]] DeviceCapabilities inspect(const fs::path& path, StorageKind storage_kind) const;
+
+private:
+    const DeviceCapabilityProbe& probe_;
+};
+
+class ErasePathAdvisor final {
+public:
+    [[nodiscard]] ErasePathAdvice advise(const InspectionReport& report) const;
 };
 
 class NativeFile final {
@@ -137,6 +172,9 @@ public:
 
 private:
     PathInspector inspector_;
+    SystemDeviceCapabilityProbe device_capability_probe_;
+    DeviceCapabilityInspector device_capability_inspector_;
+    ErasePathAdvisor erase_path_advisor_;
     FileWiper file_wiper_;
     DirectoryWiper directory_wiper_;
 };

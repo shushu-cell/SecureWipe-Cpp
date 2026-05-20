@@ -58,6 +58,34 @@ constexpr std::array<EnumLabel<StrategyRecommendation>, 5> kRecommendationLabels
     {StrategyRecommendation::ReviewBeforeWipe, "review-before-wipe"sv},
 }};
 
+constexpr std::array<EnumLabel<DeviceBusKind>, 8> kDeviceBusLabels{{
+    {DeviceBusKind::Unknown, "unknown"sv},
+    {DeviceBusKind::Usb, "usb"sv},
+    {DeviceBusKind::Ata, "ata"sv},
+    {DeviceBusKind::Sata, "sata"sv},
+    {DeviceBusKind::Nvme, "nvme"sv},
+    {DeviceBusKind::Scsi, "scsi"sv},
+    {DeviceBusKind::Virtual, "virtual"sv},
+    {DeviceBusKind::Network, "network"sv},
+}};
+
+constexpr std::array<EnumLabel<CapabilityState>, 4> kCapabilityStateLabels{{
+    {CapabilityState::Unknown, "unknown"sv},
+    {CapabilityState::Unsupported, "unsupported"sv},
+    {CapabilityState::Supported, "supported"sv},
+    {CapabilityState::Restricted, "restricted"sv},
+}};
+
+constexpr std::array<EnumLabel<EraseMethod>, 7> kEraseMethodLabels{{
+    {EraseMethod::Unknown, "unknown"sv},
+    {EraseMethod::Refuse, "refuse"sv},
+    {EraseMethod::BestEffortFileOverwrite, "best-effort-file-overwrite"sv},
+    {EraseMethod::BestEffortDirectoryWipe, "best-effort-directory-wipe"sv},
+    {EraseMethod::DeviceSanitizeReview, "device-sanitize-review"sv},
+    {EraseMethod::CryptoEraseReview, "crypto-erase-review"sv},
+    {EraseMethod::ManualReview, "manual-review"sv},
+}};
+
 const std::map<std::string, Pattern> kPatternOptions{
     {"zeros", Pattern::Zeros},
     {"random", Pattern::Random},
@@ -147,6 +175,7 @@ CommandLineApplication::ParseResult CommandLineApplication::parse(const std::vec
 
     auto* inspect_command = app.add_subcommand("inspect", "Inspect a target and report the recommended wipe strategy.");
     inspect_command->add_option("path", request.path, "Target path")->required();
+    inspect_command->add_flag("--detail", request.detail, "Show device capability details and erase path advice");
 
     auto* wipe_command = app.add_subcommand("wipe", "Best-effort wipe of a single file.");
     configure_shared_wipe_options(*wipe_command, request.path, request.options);
@@ -222,6 +251,18 @@ std::string_view CommandLineApplication::to_string(StrategyRecommendation recomm
     return enum_label_or_unknown(recommendation, kRecommendationLabels);
 }
 
+std::string_view CommandLineApplication::to_string(DeviceBusKind bus_kind) noexcept {
+    return enum_label_or_unknown(bus_kind, kDeviceBusLabels);
+}
+
+std::string_view CommandLineApplication::to_string(CapabilityState state) noexcept {
+    return enum_label_or_unknown(state, kCapabilityStateLabels);
+}
+
+std::string_view CommandLineApplication::to_string(EraseMethod method) noexcept {
+    return enum_label_or_unknown(method, kEraseMethodLabels);
+}
+
 int CommandLineApplication::run_inspect(const CommandRequest& request) const {
     const InspectionReport report = inspect_target(request.path);
     if (!report.ok) {
@@ -229,7 +270,7 @@ int CommandLineApplication::run_inspect(const CommandRequest& request) const {
         return to_exit_code(ExitCode::ExecutionFailure);
     }
 
-    print_inspection_report(report);
+    print_inspection_report(report, request.detail);
     return report.recommendation == StrategyRecommendation::Refuse
         ? to_exit_code(ExitCode::Rejected)
         : to_exit_code(ExitCode::Success);
@@ -257,7 +298,7 @@ int CommandLineApplication::run_wipe_directory(const CommandRequest& request) co
     return to_exit_code(ExitCode::Success);
 }
 
-void CommandLineApplication::print_inspection_report(const InspectionReport& report) const {
+void CommandLineApplication::print_inspection_report(const InspectionReport& report, bool detail) const {
     write_field(output_, "path", report.canonical_path);
     write_field(output_, "target-kind", to_string(report.target_kind));
     write_field(output_, "storage-kind", to_string(report.storage_kind));
@@ -269,6 +310,24 @@ void CommandLineApplication::print_inspection_report(const InspectionReport& rep
     write_field(output_, "summary", report.message);
     for (const auto& warning : report.warnings) {
         write_field(output_, "warning", warning);
+    }
+
+    if (!detail) {
+        return;
+    }
+
+    write_field(output_, "device-bus", to_string(report.device_capabilities.bus_kind));
+    write_field(output_, "trim-support", to_string(report.device_capabilities.trim_support));
+    write_field(output_, "device-sanitize-review", to_string(report.device_capabilities.device_sanitize_review));
+    write_field(output_, "crypto-erase-review", to_string(report.device_capabilities.crypto_erase_review));
+    write_field(output_, "removable-media", report.device_capabilities.is_removable_media ? "yes"sv : "no"sv);
+    write_field(output_, "usb-bridge-suspected", report.device_capabilities.usb_bridge_suspected ? "yes"sv : "no"sv);
+    write_field(output_, "preferred-erase-method", to_string(report.erase_path_advice.preferred_method));
+    for (const auto& evidence : report.device_capabilities.evidence) {
+        write_field(output_, "capability-evidence", evidence);
+    }
+    for (const auto& reason : report.erase_path_advice.reasons) {
+        write_field(output_, "erase-advice", reason);
     }
 }
 

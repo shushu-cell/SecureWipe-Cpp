@@ -33,6 +33,7 @@ private:
         CommandKind kind = CommandKind::Help;
         std::string path;
         WipeOptions options;
+        bool detail = false;
         bool dry_run = false;
         bool yes = false;
     };
@@ -51,11 +52,14 @@ private:
     [[nodiscard]] static std::string_view to_string(TargetKind kind) noexcept;
     [[nodiscard]] static std::string_view to_string(StorageKind kind) noexcept;
     [[nodiscard]] static std::string_view to_string(StrategyRecommendation recommendation) noexcept;
+    [[nodiscard]] static std::string_view to_string(DeviceBusKind bus_kind) noexcept;
+    [[nodiscard]] static std::string_view to_string(CapabilityState state) noexcept;
+    [[nodiscard]] static std::string_view to_string(EraseMethod method) noexcept;
 
     int run_inspect(const CommandRequest& request) const;
     int run_wipe_file(const CommandRequest& request) const;
     int run_wipe_directory(const CommandRequest& request) const;
-    void print_inspection_report(const InspectionReport& report) const;
+    void print_inspection_report(const InspectionReport& report, bool detail) const;
 
     std::ostream& output_;
     std::ostream& error_output_;

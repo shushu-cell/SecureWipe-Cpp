@@ -5,6 +5,7 @@
 ```text
 securewipe --help
 securewipe inspect <path>
+securewipe inspect --detail <path>
 securewipe wipe <path> [--passes N] [--pattern zeros|random]
 securewipe wipe-dir <dir> [--passes N] [--pattern zeros|random] [--dry-run] [--yes]
 ```
@@ -15,9 +16,10 @@ securewipe wipe-dir <dir> [--passes N] [--pattern zeros|random] [--dry-run] [--y
 
 ```text
 securewipe inspect secret.txt
+securewipe inspect --detail secret.txt
 ```
 
-当前输出字段包括：
+默认输出字段包括：
 
 - `path`：归一化后的路径
 - `target-kind`：目标类型，例如 `regular-file`、`directory`、`symlink`
@@ -26,6 +28,20 @@ securewipe inspect secret.txt
 - `volume`：可识别时返回文件系统或卷信息
 - `dangerous`：是否属于危险目标
 - `summary` / `warning`：说明与风险提示
+
+`inspect --detail <path>` 会在保留默认字段的同时，追加非破坏性的设备能力与路径解释字段：
+
+- `device-bus`：总线或设备形态级别的推断，例如 `usb`、`sata`、`nvme`、`virtual`、`network`
+- `trim-support`：`unknown`、`unsupported`、`supported`、`restricted`
+- `device-sanitize-review`：当前是否值得进入设备级 sanitize review
+- `crypto-erase-review`：当前是否值得进入 crypto-erase review
+- `removable-media`：当前路径是否位于可移动介质上
+- `usb-bridge-suspected`：当前探测是否疑似落在 USB 桥接场景
+- `preferred-erase-method`：当前更细粒度的推荐路径，例如 `best-effort-file-overwrite`、`device-sanitize-review`、`manual-review`
+- `capability-evidence`：设备能力结论背后的非破坏性证据文本
+- `erase-advice`：为什么当前更适合这条路径的解释文本
+
+这组详细字段仍然是**探测与解释**，不是设备级命令执行结果。
 
 ## `wipe`
 
@@ -80,6 +96,7 @@ securewipe wipe-dir ./scratch --passes 1 --pattern random --yes
 
 ```text
 securewipe inspect ./sample.txt
+securewipe inspect --detail ./sample.txt
 securewipe wipe ./sample.txt --passes 1 --pattern zeros
 securewipe wipe-dir ./tmp --dry-run
 securewipe wipe-dir ./tmp --passes 1 --pattern random --yes

@@ -37,7 +37,7 @@ flowchart LR
 |---|---|---|
 | 公共接口层 | `include/secure_wipe.h` | 提供稳定的对外 API、值类型和顶层函数 |
 | 外观层 | `src/secure_wipe.cpp` | 将顶层函数转发到内部对象协作 |
-| 内部引擎层 | `src/path_inspector.cpp`、`src/native_file.cpp`、`src/file_wiper.cpp`、`src/directory_wiper.cpp`、`src/secure_wipe_engine.cpp` + `src/internal/secure_wipe_engine.h` | 路径检查、文件句柄管理、文件擦除、目录擦除、报告抽象与对象组合 |
+| 内部引擎层 | `src/path_inspector.cpp`、`src/device_capability_inspector.cpp`、`src/erase_path_advisor.cpp`、`src/native_file.cpp`、`src/file_wiper.cpp`、`src/directory_wiper.cpp`、`src/secure_wipe_engine.cpp` + `src/internal/secure_wipe_engine.h` | 路径检查、设备能力探测、擦除路径建议、文件句柄管理、文件擦除、目录擦除、报告抽象与对象组合 |
 | CLI 应用层 | `src/cli_application.cpp` + `src/internal/cli_application.h` | 参数解析、帮助输出、CLI 返回码和表现逻辑 |
 | 测试层 | `tests/` | 回归行为与参数校验验证 |
 | 文档层 | `docs/`, `mkdocs.yml` | 维护项目知识、使用方式和工程约束 |
@@ -59,6 +59,8 @@ flowchart TB
 	subgraph Engine[内部引擎]
 		Facade[SecureWipeFacade]
 		Inspector[PathInspector]
+		Capability[DeviceCapabilityInspector]
+		Advisor[ErasePathAdvisor]
 		Directory[DirectoryWiper]
 		File[FileWiper]
 		Native[NativeFile]
@@ -76,6 +78,8 @@ flowchart TB
 	Header --> ApiFacade
 	ApiFacade --> Facade
 	Facade --> Inspector
+	Facade --> Capability
+	Facade --> Advisor
 	Facade --> Directory
 	Facade --> File
 	Directory --> File
@@ -96,6 +100,18 @@ flowchart TB
 - 判断目标类型
 - 检查危险目录
 - 估算介质类型和 recommendation
+
+### `DeviceCapabilityInspector`
+
+- 基于只读平台探测补充设备能力线索
+- 输出 `DeviceCapabilities`
+- 保持和 `PathInspector` 分离，避免路径检查对象膨胀成新的 God object
+
+### `ErasePathAdvisor`
+
+- 基于 `InspectionReport` + `DeviceCapabilities` 生成更细粒度的 `ErasePathAdvice`
+- 解释为什么当前更适合保持文件级 best-effort，还是先进入设备级 review
+- 只做解释和推荐，不执行 destructive device command
 
 ### `NativeFile`
 
@@ -125,8 +141,9 @@ flowchart TB
 
 ### `SecureWipeFacade`
 
-- 组合 `PathInspector`、`FileWiper`、`DirectoryWiper`
+- 组合 `PathInspector`、`DeviceCapabilityInspector`、`ErasePathAdvisor`、`FileWiper`、`DirectoryWiper`
 - 为公共 API 提供稳定入口
+- 负责编排增强后的 inspect 主流程，而不是让 CLI 或 `PathInspector` 自己承载平台分支
 
 ### `CommandLineApplication`
 
@@ -167,6 +184,8 @@ sequenceDiagram
 	API-->>CLI: WipeResult
 	CLI-->>User: stdout/stderr + exit code
 ```
+
+`inspect --detail <path>` 的主干执行路径则是：先由 `PathInspector` 生成基础 `InspectionReport`，再由 `DeviceCapabilityInspector` 读取非破坏性能力快照，最后由 `ErasePathAdvisor` 追加更细粒度的推荐路径与解释文本。
 
 ## 头文件边界
 
@@ -210,7 +229,7 @@ sequenceDiagram
 
 未来如果引入设备级 sanitization，推荐继续沿用当前边界：
 
-- 新增设备能力探测对象，而不是把逻辑重新塞回 `FileWiper`
+- 继续复用当前已经引入的设备能力探测对象，而不是把逻辑重新塞回 `FileWiper`
 - 保持每个领域对象的翻译单元粒度，避免重新出现“大而全”的 `*.cpp`
 - 通过 `OperationReporter` 一类的抽象继续隔离领域逻辑与表现层输出
 - 对外 API 保持稳定，优先扩展值类型和 recommendation 语义

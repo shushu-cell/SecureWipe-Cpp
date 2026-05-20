@@ -26,12 +26,23 @@ void StreamOperationReporter::on_file_failure(const fs::path& path, std::string_
 
 SecureWipeFacade::SecureWipeFacade(OperationReporter& reporter)
     : inspector_{},
+    device_capability_probe_{},
+    device_capability_inspector_{device_capability_probe_},
+    erase_path_advisor_{},
       file_wiper_{inspector_},
       directory_wiper_{inspector_, file_wiper_, reporter} {
 }
 
 InspectionReport SecureWipeFacade::inspect(std::string_view path) const {
-    return inspector_.inspect(path);
+    InspectionReport report = inspector_.inspect(path);
+    if (!report.ok) {
+        return report;
+    }
+
+    const fs::path resolved = inspector_.resolve_path(path_from_view(path));
+    report.device_capabilities = device_capability_inspector_.inspect(resolved, report.storage_kind);
+    report.erase_path_advice = erase_path_advisor_.advise(report);
+    return report;
 }
 
 WipeResult SecureWipeFacade::wipe_file(std::string_view path, const WipeOptions& options) const {

@@ -8,6 +8,24 @@
 
 也就是先把“当前目标位于什么介质、背后是什么总线/设备形态、理论上支持哪些擦除路径、当前为什么推荐某种路径”做成一个正式的、可测试的能力层，并通过现有 `inspect` 入口暴露出来。
 
+### 实施状态更新
+
+阶段 1 的核心实现已经落地，当前代码状态为：
+
+- `InspectionReport` 已增量携带 `DeviceCapabilities` 与 `ErasePathAdvice`
+- `SecureWipeFacade::inspect(...)` 已按审查后的职责边界编排：基础路径检查、能力探测、路径建议
+- CLI 已新增 `inspect --detail <path>`，默认 `inspect <path>` 的简洁输出保持稳定
+- Windows / Linux 已接入只读能力探测；macOS 与其他平台仍保守回退到 `Unknown` / `Restricted` 风格的结果
+- 测试已覆盖 fake probe 场景、advisor 映射与详细输出字段
+
+当前仍未进入的范围保持不变：
+
+- 不执行 ATA / NVMe destructive device command
+- 不输出审计证书
+- 不把“总线推断”包装成“已确认支持 sanitize”
+
+后续工作转入实现后的三轮审查 / 重构阶段，而不是继续扩大阶段 1 范围。
+
 ### 为什么下一步先做这个
 
 结合 `refs/deep-research-report.md` 与当前 `docs/`，这个选择最符合“谨慎的小步迭代、从易到难”的原则：

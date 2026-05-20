@@ -43,6 +43,49 @@ enum class StrategyRecommendation {
     ReviewBeforeWipe
 };
 
+enum class DeviceBusKind {
+    Unknown,
+    Usb,
+    Ata,
+    Sata,
+    Nvme,
+    Scsi,
+    Virtual,
+    Network
+};
+
+enum class CapabilityState {
+    Unknown,
+    Unsupported,
+    Supported,
+    Restricted
+};
+
+enum class EraseMethod {
+    Unknown,
+    Refuse,
+    BestEffortFileOverwrite,
+    BestEffortDirectoryWipe,
+    DeviceSanitizeReview,
+    CryptoEraseReview,
+    ManualReview
+};
+
+struct [[nodiscard]] DeviceCapabilities {
+    DeviceBusKind bus_kind = DeviceBusKind::Unknown;
+    CapabilityState trim_support = CapabilityState::Unknown;
+    CapabilityState device_sanitize_review = CapabilityState::Unknown;
+    CapabilityState crypto_erase_review = CapabilityState::Unknown;
+    bool is_removable_media = false;
+    bool usb_bridge_suspected = false;
+    std::vector<std::string> evidence;
+};
+
+struct [[nodiscard]] ErasePathAdvice {
+    EraseMethod preferred_method = EraseMethod::Unknown;
+    std::vector<std::string> reasons;
+};
+
 struct [[nodiscard]] WipeResult {
     bool ok = false;
     bool dry_run = false;
@@ -58,6 +101,8 @@ struct [[nodiscard]] InspectionReport {
     TargetKind target_kind = TargetKind::Missing;
     StorageKind storage_kind = StorageKind::Unknown;
     StrategyRecommendation recommendation = StrategyRecommendation::None;
+    DeviceCapabilities device_capabilities;
+    ErasePathAdvice erase_path_advice;
     std::string canonical_path;
     std::string volume_name;
     std::string message;
