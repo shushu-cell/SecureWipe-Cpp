@@ -360,3 +360,26 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- 未调整现有解释文本的对外语义，只是重组生成位置
 	- 未把所有 recommendation 都抽成独立策略对象，当前 `switch` 仍是最清晰的入口
 - 验证：`cmake --build build`、`ctest --test-dir build -C Debug --output-on-failure` 通过
+
+### 第 3 轮：平台探测主流程收口
+
+- 识别到的坏味道：`SystemDeviceCapabilityProbe::probe(...)` 顶层流程同时承载共享前置守卫和大段 Windows / Linux 平台分支，使得“公共守卫逻辑”和“平台细节实现”交错，后续增加平台分支或证据采集时容易扩大修改面。
+- 采取的重构：
+	- 抽出 `probe_windows_device_capabilities(...)`
+	- 抽出 `probe_linux_device_capabilities(...)`
+	- 抽出 `probe_unsupported_platform_capabilities(...)`
+	- 让 `SystemDeviceCapabilityProbe::probe(...)` 只保留共享的 `network` 早返回和平台分派
+- 刻意不改动的部分：
+	- 未再把平台 helper 下沉到新的翻译单元，当前文件体量和内聚性仍然可接受
+	- 未新增任何平台能力或探测字段，只做结构整理
+	- 未改变 `PathInspector` / `SecureWipeFacade` 的现有职责边界
+- 验证：`cmake --build build`、`ctest --test-dir build -C Debug --output-on-failure` 通过
+
+### 本次三轮重构后的结论
+
+- 设备能力探测链路的策略判断、路径建议和平台探测分派边界比改动前更清晰。
+- 当前最值得保留的非改动是：
+	- 公共 API 保持稳定
+	- CLI 输出契约保持稳定
+	- 平台分支仍保持显式命令式结构，未为了“更现代”而把副作用流程压成难读的抽象
+- 本次重构结束时，代码层验证仍以完整编译与完整测试通过为准。

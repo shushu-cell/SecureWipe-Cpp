@@ -207,6 +207,41 @@ void populate_windows_device_descriptor(HANDLE handle, DeviceProbeSnapshot& snap
         append_evidence(snapshot.evidence, "Windows storage stack reported a concrete device bus type.");
     }
 }
+
+DeviceProbeSnapshot probe_windows_device_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
+    const fs::path root = path.root_path();
+    if (root.empty()) {
+        append_evidence(snapshot.evidence, "Path does not expose a stable root for Windows storage probing.");
+        return snapshot;
+    }
+
+    const std::wstring device_path = volume_device_path_from_root(root);
+    if (device_path.empty()) {
+        append_evidence(snapshot.evidence, "Windows volume device path could not be derived from the target root.");
+        return snapshot;
+    }
+
+    const ScopedWindowsHandle handle(CreateFileW(
+        device_path.c_str(),
+        0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        0,
+        nullptr));
+    if (!handle.is_valid()) {
+        append_evidence(snapshot.evidence, "Windows volume handle could not be opened for read-only capability probing.");
+        return snapshot;
+    }
+
+    populate_windows_device_descriptor(handle.get(), snapshot);
+    snapshot.trim_support = query_trim_support(handle.get());
+    if (snapshot.trim_support != CapabilityState::Unknown) {
+        append_evidence(snapshot.evidence, "Windows storage stack returned trim/discard capability information.");
+    }
+
+    return snapshot;
+}
 #endif
 
 #if defined(__linux__)
@@ -263,52 +298,8 @@ CapabilityState read_discard_support(const std::string& device_name) {
         return CapabilityState::Unknown;
     }
 }
-#endif
 
-} // namespace
-
-DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, StorageKind storage_kind) const {
-    DeviceProbeSnapshot snapshot;
-    snapshot.is_removable_media = storage_kind == StorageKind::RemovableDisk;
-
-    if (storage_kind == StorageKind::NetworkShare) {
-        snapshot.bus_kind = DeviceBusKind::Network;
-        append_evidence(snapshot.evidence, "Network-backed paths do not expose a local block device for direct inspection.");
-        return snapshot;
-    }
-
-#if defined(_WIN32)
-    const fs::path root = path.root_path();
-    if (root.empty()) {
-        append_evidence(snapshot.evidence, "Path does not expose a stable root for Windows storage probing.");
-        return snapshot;
-    }
-
-    const std::wstring device_path = volume_device_path_from_root(root);
-    if (device_path.empty()) {
-        append_evidence(snapshot.evidence, "Windows volume device path could not be derived from the target root.");
-        return snapshot;
-    }
-
-    const ScopedWindowsHandle handle(CreateFileW(
-        device_path.c_str(),
-        0,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr,
-        OPEN_EXISTING,
-        0,
-        nullptr));
-    if (!handle.is_valid()) {
-        append_evidence(snapshot.evidence, "Windows volume handle could not be opened for read-only capability probing.");
-        return snapshot;
-    }
-
-    populate_windows_device_descriptor(handle.get(), snapshot);
-    snapshot.trim_support = query_trim_support(handle.get());
-    if (snapshot.trim_support != CapabilityState::Unknown) {
-        append_evidence(snapshot.evidence, "Windows storage stack returned trim/discard capability information.");
-    }
-#elif defined(__linux__)
+DeviceProbeSnapshot probe_linux_device_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
     const auto best_match = find_best_linux_mount_entry(path);
     if (!best_match) {
         append_evidence(snapshot.evidence, "Linux mount metadata could not be resolved for this path.");
@@ -339,12 +330,35 @@ DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, Sto
     }
 
     append_evidence(snapshot.evidence, "Linux sysfs and mount metadata were used to infer device capabilities.");
-#else
-    (void)path;
-    append_evidence(snapshot.evidence, "Detailed device capability probing is not implemented on this platform.");
+    return snapshot;
+}
 #endif
 
+DeviceProbeSnapshot probe_unsupported_platform_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
+    (void)path;
+    append_evidence(snapshot.evidence, "Detailed device capability probing is not implemented on this platform.");
     return snapshot;
+}
+
+} // namespace
+
+DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, StorageKind storage_kind) const {
+    DeviceProbeSnapshot snapshot;
+    snapshot.is_removable_media = storage_kind == StorageKind::RemovableDisk;
+
+    if (storage_kind == StorageKind::NetworkShare) {
+        snapshot.bus_kind = DeviceBusKind::Network;
+        append_evidence(snapshot.evidence, "Network-backed paths do not expose a local block device for direct inspection.");
+        return snapshot;
+    }
+
+#if defined(_WIN32)
+    return probe_windows_device_capabilities(path, std::move(snapshot));
+#elif defined(__linux__)
+    return probe_linux_device_capabilities(path, std::move(snapshot));
+#else
+    return probe_unsupported_platform_capabilities(path, std::move(snapshot));
+#endif
 }
 
 DeviceCapabilityInspector::DeviceCapabilityInspector(const DeviceCapabilityProbe& probe) noexcept
