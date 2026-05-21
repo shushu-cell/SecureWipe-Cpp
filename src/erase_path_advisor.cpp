@@ -1,16 +1,63 @@
 #include "internal/secure_wipe_engine.h"
 
+#include <array>
+#include <ranges>
+
 namespace securewipe::detail {
 
 namespace {
+
+struct DirectAdviceMapping {
+    StrategyRecommendation recommendation;
+    EraseMethod preferred_method;
+    std::string_view primary_reason;
+};
 
 struct ReviewSelection {
     EraseMethod preferred_method;
     std::string_view primary_reason;
 };
 
+constexpr std::array kDirectAdviceMappings{
+    DirectAdviceMapping{
+        StrategyRecommendation::Refuse,
+        EraseMethod::Refuse,
+        "Current target should not be processed destructively.",
+    },
+    DirectAdviceMapping{
+        StrategyRecommendation::BestEffortFileOverwrite,
+        EraseMethod::BestEffortFileOverwrite,
+        "Current target is best handled with file-level overwrite and delete.",
+    },
+    DirectAdviceMapping{
+        StrategyRecommendation::BestEffortDirectoryWipe,
+        EraseMethod::BestEffortDirectoryWipe,
+        "Current target is best handled with directory traversal and file-level overwrite.",
+    },
+    DirectAdviceMapping{
+        StrategyRecommendation::None,
+        EraseMethod::Unknown,
+        "No erase path is available because the inspection result did not produce a strategy recommendation.",
+    },
+};
+
 void add_reason(std::vector<std::string>& reasons, std::string_view reason) {
     reasons.emplace_back(reason);
+}
+
+const DirectAdviceMapping* find_direct_advice_mapping(StrategyRecommendation recommendation) {
+    const auto entry = std::ranges::find(
+        kDirectAdviceMappings,
+        recommendation,
+        &DirectAdviceMapping::recommendation);
+    return entry != kDirectAdviceMappings.end() ? &*entry : nullptr;
+}
+
+void append_direct_recommendation_advice(ErasePathAdvice& advice, StrategyRecommendation recommendation) {
+    if (const DirectAdviceMapping* mapping = find_direct_advice_mapping(recommendation); mapping != nullptr) {
+        advice.preferred_method = mapping->preferred_method;
+        add_reason(advice.reasons, mapping->primary_reason);
+    }
 }
 
 ReviewSelection select_review_before_wipe_method(const DeviceCapabilities& capabilities) {
@@ -58,27 +105,12 @@ ErasePathAdvice ErasePathAdvisor::advise(const InspectionReport& report) const {
         return advice;
     }
 
-    switch (report.recommendation) {
-    case StrategyRecommendation::Refuse:
-        advice.preferred_method = EraseMethod::Refuse;
-        add_reason(advice.reasons, "Current target should not be processed destructively.");
-        break;
-    case StrategyRecommendation::BestEffortFileOverwrite:
-        advice.preferred_method = EraseMethod::BestEffortFileOverwrite;
-        add_reason(advice.reasons, "Current target is best handled with file-level overwrite and delete.");
-        break;
-    case StrategyRecommendation::BestEffortDirectoryWipe:
-        advice.preferred_method = EraseMethod::BestEffortDirectoryWipe;
-        add_reason(advice.reasons, "Current target is best handled with directory traversal and file-level overwrite.");
-        break;
-    case StrategyRecommendation::ReviewBeforeWipe:
+    if (report.recommendation == StrategyRecommendation::ReviewBeforeWipe) {
         append_review_before_wipe_reasons(advice, report.device_capabilities);
-        break;
-    case StrategyRecommendation::None:
-        advice.preferred_method = EraseMethod::Unknown;
-        add_reason(advice.reasons, "No erase path is available because the inspection result did not produce a strategy recommendation.");
-        break;
+        return advice;
     }
+
+    append_direct_recommendation_advice(advice, report.recommendation);
 
     return advice;
 }

@@ -148,6 +148,18 @@ void test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths() {
             "ErasePathAdvisor should keep rotational single-file targets on the best-effort overwrite path");
 }
 
+void test_erase_path_advisor_reports_unknown_when_no_recommendation_exists() {
+    securewipe::InspectionReport report;
+    report.ok = true;
+    report.recommendation = securewipe::StrategyRecommendation::None;
+
+    const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
+    require(advice.preferred_method == securewipe::EraseMethod::Unknown,
+            "ErasePathAdvisor should keep unknown erase method when there is no strategy recommendation");
+    require(!advice.reasons.empty() && contains(advice.reasons.front(), "did not produce a strategy recommendation"),
+            "ErasePathAdvisor should explain why no erase path is available");
+}
+
 } // namespace
 
 void run_capability_inspection_tests() {
@@ -157,4 +169,5 @@ void run_capability_inspection_tests() {
     test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets();
     test_erase_path_advisor_falls_back_to_crypto_erase_review();
     test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths();
+        test_erase_path_advisor_reports_unknown_when_no_recommendation_exists();
 }

@@ -443,3 +443,16 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- 未改动 `DeviceCapabilityProbe::probe(...)` 的底层接口，因为平台 probe 目前只实际依赖路径与 `StorageKind`
 	- 未把 `InspectionReport` 直接作为 probe 输入，避免让 probe 层依赖更大的上层对象
 	- 未扩展新的公共 API，此上下文类型保持在内部边界
+
+### 第 2 轮：advisor 直接 recommendation 映射收口
+
+- 识别到的坏味道：`ErasePathAdvisor::advise(...)` 中 `Refuse`、`BestEffortFileOverwrite`、`BestEffortDirectoryWipe`、`None` 都是“直接 recommendation -> method + 单条主理由”的同构分支，但当前仍分别写在 `switch` 里，真正特殊的 `ReviewBeforeWipe` 路径被埋在相同层级。
+- 采取的重构：
+	- 新增 `DirectAdviceMapping`
+	- 用只读映射表集中表达直接 recommendation 的固定 advice
+	- `advise(...)` 改为只显式处理 `ReviewBeforeWipe`，其余 recommendation 统一走映射查找
+	- 增加纯 advisor 回归测试，覆盖 `StrategyRecommendation::None -> EraseMethod::Unknown`
+- 刻意不改动的部分：
+	- 未把 `ReviewBeforeWipe` 也塞进同一映射表，因为该路径仍然是条件化决策，不适合伪装成静态表项
+	- 未调整现有原因文案，只收敛了生成位置
+	- 未把 advisor 进一步拆成策略类层次，当前文件规模和规则数量还不需要那种抽象
