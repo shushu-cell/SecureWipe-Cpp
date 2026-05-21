@@ -71,6 +71,64 @@ enum class EraseMethod {
     ManualReview
 };
 
+enum class EvidenceSubject {
+    BusKind,
+    TrimSupport,
+    DeviceSanitizeReview,
+    CryptoEraseReview,
+    Restriction
+};
+
+enum class EvidenceSource {
+    PathInspection,
+    WindowsStorageQuery,
+    LinuxMountMetadata,
+    LinuxSysfs,
+    HeuristicGuard,
+    PlatformFallback
+};
+
+enum class EvidenceConfidence {
+    Observed,
+    Inferred,
+    ConservativeFallback
+};
+
+enum class PreflightRisk {
+    NetworkBacked,
+    UsbBridgeSuspected,
+    VirtualizedStorage,
+    PlatformProbeGap,
+    UnderlyingDeviceReviewRecommended
+};
+
+enum class ActionCandidateState {
+    Preferred,
+    Available,
+    Blocked,
+    Unavailable
+};
+
+enum class ActionTargetScope {
+    CurrentPath,
+    UnderlyingDevice
+};
+
+struct [[nodiscard]] CapabilityEvidenceItem {
+    EvidenceSubject subject = EvidenceSubject::Restriction;
+    EvidenceSource source = EvidenceSource::HeuristicGuard;
+    EvidenceConfidence confidence = EvidenceConfidence::ConservativeFallback;
+    std::string summary;
+};
+
+struct [[nodiscard]] ActionCandidate {
+    EraseMethod method = EraseMethod::Unknown;
+    ActionCandidateState state = ActionCandidateState::Unavailable;
+    ActionTargetScope target_scope = ActionTargetScope::CurrentPath;
+    std::string summary;
+    std::vector<std::string> blockers;
+};
+
 struct [[nodiscard]] DeviceCapabilities {
     DeviceBusKind bus_kind = DeviceBusKind::Unknown;
     CapabilityState trim_support = CapabilityState::Unknown;
@@ -79,11 +137,14 @@ struct [[nodiscard]] DeviceCapabilities {
     bool is_removable_media = false;
     bool usb_bridge_suspected = false;
     std::vector<std::string> evidence;
+    std::vector<CapabilityEvidenceItem> evidence_items;
 };
 
 struct [[nodiscard]] ErasePathAdvice {
     EraseMethod preferred_method = EraseMethod::Unknown;
     std::vector<std::string> reasons;
+    std::vector<PreflightRisk> risk_flags;
+    std::vector<ActionCandidate> action_candidates;
 };
 
 struct [[nodiscard]] WipeResult {

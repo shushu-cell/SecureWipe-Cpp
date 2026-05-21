@@ -110,13 +110,14 @@ flowchart TB
 ### [DeviceCapabilityInspector][device-capability-inspector-src]
 
 - 基于只读平台探测补充设备能力线索
-- 输出 [DeviceCapabilities][secure-wipe-header]
+- 输出 [DeviceCapabilities][secure-wipe-header]，包括解释文本和结构化 `evidence_items`
 - 保持和 [PathInspector][path-inspector-src] 分离，避免路径检查对象膨胀成新的 God object
 
 ### [ErasePathAdvisor][erase-path-advisor-src]
 
 - 基于 [InspectionReport][secure-wipe-header] + [DeviceCapabilities][secure-wipe-header] 生成更细粒度的 [ErasePathAdvice][secure-wipe-header]
 - 解释为什么当前更适合保持文件级 best-effort，还是先进入设备级 review
+- 输出结构化 `risk_flags` 和 `action_candidates`，把“推荐什么”“为什么受阻”“作用于当前路径还是底层设备”明确建模
 - 只做解释和推荐，不执行 destructive device command
 
 ### [NativeFile][native-file-src]
@@ -156,6 +157,7 @@ flowchart TB
 - 解析命令行参数
 - 校验参数组合是否合法
 - 控制输出和退出码
+- 在 `inspect --detail` 中同时渲染稳定字段、结构化证据和结构化预执行候选动作
 - 作为 CLI 的唯一应用层对象
 
 ## 运行时视图

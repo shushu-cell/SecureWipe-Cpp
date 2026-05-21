@@ -782,3 +782,48 @@
 - 不在这一轮输出完整敏感设备标识。
 - 不在这一轮新增任何 ATA / NVMe / PSID destructive command 执行路径。
 - 不在这一轮把 report / certificate 伪装成已经存在的能力。
+
+## 2026-05-21 结构化证据与预执行计划实现检查点
+
+### 本轮已落地的实现范围
+
+- `include/secure_wipe.h` 已以加法方式新增：
+  - `EvidenceSubject`
+  - `EvidenceSource`
+  - `EvidenceConfidence`
+  - `PreflightRisk`
+  - `ActionCandidateState`
+  - `ActionTargetScope`
+  - `CapabilityEvidenceItem`
+  - `ActionCandidate`
+- `DeviceCapabilities` 已新增 `evidence_items`，`ErasePathAdvice` 已新增 `risk_flags` 与 `action_candidates`。
+- `DeviceCapabilityInspector` 已把平台探测和 review 状态解释同步写入结构化 evidence。
+- `ErasePathAdvisor` 已把 read-only preflight 风险、候选动作、作用域和 blocker 建模到结构化字段中。
+- `inspect --detail` 已新增三组输出：
+  - `capability-evidence`
+  - `preflight-risk`
+  - `preflight-action` / `preflight-blocker`
+- `tests/capability_inspection_tests.cpp` 已补齐结构化 evidence、risk 和 candidate-action 的断言。
+- `docs/` 已同步更新 requirements、architecture、api、cli、safety、algorithm 与术语文档。
+
+### 本轮刻意保持的边界
+
+- 仍然不执行 ATA / NVMe / PSID destructive device command。
+- 仍然不引入 JSON 导出。
+- 仍然不引入独立顶层 `InspectPreflightPlan` 公共类型。
+- 仍然保留现有自由文本 `evidence` / `reasons`，并将结构化字段作为增量扩展。
+
+### 当前验证结果
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+- `python tools/validate_docs_code_links.py` 通过。
+- `python -m mkdocs build --strict` 通过。
+
+### 下一阶段
+
+进入实现后的三轮审查 / 重构，目标是：
+
+1. 压缩重复逻辑，确保结构化字段生成链路更清晰。
+2. 继续保持默认 `inspect` 与 read-only preflight 边界稳定。
+3. 每轮均以可执行验证和文档同步收尾，再分别提交与 push。

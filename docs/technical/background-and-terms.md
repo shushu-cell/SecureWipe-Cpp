@@ -107,6 +107,11 @@ SecureWipe-Cpp 当前版本只承诺**应用层、文件级、best-effort** 擦�
 | `inspect` | 先检查目标，再决定是否进入破坏性流程 | 只是打印一些漂亮信息 |
 | `recommendation` | 系统根据风险和介质线索给出的建议路径 | 法律、审计或取证级结论 |
 | `review-before-wipe` | 暂停在“应该先人工复核”的阶段 | 鼓励用户直接继续 destructive 动作 |
+| `capability-evidence` | 当前结论背后的结构化只读证据，包含主题、来源、置信度和摘要 | 审计报告或硬件厂商确认书 |
+| `preflight-risk` | 系统在执行前识别出的结构化风险标记 | 最终不可恢复性的证明 |
+| `preflight-action` | 当前可见的候选动作及其状态、作用范围和摘要 | 程序已经自动排队执行的步骤 |
+| `current-path` | 面向当前文件或目录路径的动作范围 | 已经控制了整块底层设备 |
+| `underlying-device` | 提醒用户关注底层设备级路径 | 当前版本已经能直接执行 sanitize / crypto-erase |
 | `Unknown` | 当前没有足够信息，不能做强结论 | “大概率支持，只是没显示出来” |
 | `Restricted` | 某些线索存在，但不够可靠，或者有额外限制 | 基本等于 Supported |
 

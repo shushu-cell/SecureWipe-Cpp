@@ -38,10 +38,13 @@ securewipe inspect --detail secret.txt
 - `removable-media`：当前路径是否位于可移动介质上
 - `usb-bridge-suspected`：当前探测是否疑似落在 USB 桥接场景
 - `preferred-erase-method`：当前更细粒度的推荐路径，例如 `best-effort-file-overwrite`、`device-sanitize-review`、`manual-review`
-- `capability-evidence`：设备能力结论背后的非破坏性证据文本
+- `capability-evidence`：设备能力结论背后的结构化证据，当前按 `subject`、`source`、`confidence` 和 `summary` 输出
+- `preflight-risk`：当前路径上的结构化预执行风险标记，例如 `usb-bridge-suspected`、`platform-probe-gap`
+- `preflight-action`：当前可见的候选动作，带有 `method`、`state`、`scope` 和摘要
+- `preflight-blocker`：与某条候选动作绑定的阻塞原因，例如 USB bridge 或受限设备路径
 - `erase-advice`：为什么当前更适合这条路径的解释文本
 
-这组详细字段仍然是**探测与解释**，不是设备级命令执行结果。
+这组详细字段仍然是**探测与解释**，不是设备级命令执行结果。当前第一阶段也不会输出独立 JSON 计划文件，而是把结构化预执行信息附加在现有 `inspect --detail` 输出中。
 
 ## `wipe`
 

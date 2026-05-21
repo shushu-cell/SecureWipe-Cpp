@@ -106,8 +106,112 @@ constexpr std::array kReviewPolicies{
     },
 };
 
-void append_evidence(std::vector<std::string>& evidence, std::string_view line) {
-    evidence.emplace_back(line);
+void append_probe_evidence(
+    DeviceProbeSnapshot& snapshot,
+    EvidenceSubject subject,
+    EvidenceSource source,
+    EvidenceConfidence confidence,
+    std::string summary) {
+    snapshot.evidence_items.push_back(CapabilityEvidenceItem{
+        .subject = subject,
+        .source = source,
+        .confidence = confidence,
+        .summary = summary,
+    });
+    snapshot.evidence.push_back(std::move(summary));
+}
+
+void append_capability_evidence(
+    DeviceCapabilities& capabilities,
+    EvidenceSubject subject,
+    EvidenceSource source,
+    EvidenceConfidence confidence,
+    std::string summary) {
+    capabilities.evidence_items.push_back(CapabilityEvidenceItem{
+        .subject = subject,
+        .source = source,
+        .confidence = confidence,
+        .summary = summary,
+    });
+    capabilities.evidence.push_back(std::move(summary));
+}
+
+std::string_view review_label(ReviewKind review_kind) noexcept {
+    switch (review_kind) {
+    case ReviewKind::DeviceSanitize:
+        return "device-level sanitization";
+    case ReviewKind::CryptoErase:
+        return "crypto-erase";
+    }
+
+    return "manual review";
+}
+
+EvidenceSubject review_subject(ReviewKind review_kind) noexcept {
+    switch (review_kind) {
+    case ReviewKind::DeviceSanitize:
+        return EvidenceSubject::DeviceSanitizeReview;
+    case ReviewKind::CryptoErase:
+        return EvidenceSubject::CryptoEraseReview;
+    }
+
+    return EvidenceSubject::Restriction;
+}
+
+EvidenceConfidence review_confidence(CapabilityState state) noexcept {
+    switch (state) {
+    case CapabilityState::Supported:
+    case CapabilityState::Unsupported:
+        return EvidenceConfidence::Inferred;
+    case CapabilityState::Restricted:
+    case CapabilityState::Unknown:
+        return EvidenceConfidence::ConservativeFallback;
+    }
+
+    return EvidenceConfidence::ConservativeFallback;
+}
+
+std::string build_review_summary(
+    ReviewKind review_kind,
+    CapabilityState state,
+    const DeviceProbeSnapshot& snapshot,
+    StorageKind storage_kind) {
+    const std::string review_name(review_label(review_kind));
+
+    if (storage_kind == StorageKind::NetworkShare || snapshot.bus_kind == DeviceBusKind::Network) {
+        return "Network-backed paths keep " + review_name + " on a restricted review path.";
+    }
+
+    if (snapshot.usb_bridge_suspected) {
+        return "USB bridge scenarios keep " + review_name + " on a restricted review path.";
+    }
+
+    switch (state) {
+    case CapabilityState::Supported:
+        return "Current bus and storage signals support reviewing " + review_name + " for the underlying device.";
+    case CapabilityState::Unsupported:
+        return "Current bus and storage signals do not support reviewing " + review_name + " for the underlying device.";
+    case CapabilityState::Restricted:
+        return "Current path keeps " + review_name + " on a restricted review path.";
+    case CapabilityState::Unknown:
+        return "Current signals are insufficient to determine whether " + review_name + " should be reviewed for the underlying device.";
+    }
+
+    return "Current signals do not provide a stable review recommendation.";
+}
+
+void append_review_state_evidence(
+    DeviceCapabilities& capabilities,
+    ReviewKind review_kind,
+    CapabilityState state,
+    const DeviceProbeSnapshot& snapshot,
+    StorageKind storage_kind) {
+    append_capability_evidence(
+        capabilities,
+        review_subject(review_kind),
+        EvidenceSource::HeuristicGuard,
+        review_confidence(state),
+        build_review_summary(review_kind, state, snapshot, storage_kind));
 }
 
 constexpr bool is_restricted_bus(DeviceBusKind bus_kind) noexcept {
@@ -262,7 +366,12 @@ void populate_windows_device_descriptor(HANDLE handle, DeviceProbeSnapshot& snap
             static_cast<DWORD>(buffer.size()),
             &bytes_returned,
             nullptr) == 0) {
-        append_evidence(snapshot.evidence, "Windows storage property query was unavailable for this path.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::WindowsStorageQuery,
+            EvidenceConfidence::ConservativeFallback,
+            "Windows storage property query was unavailable for this path.");
         return;
     }
 
@@ -272,20 +381,35 @@ void populate_windows_device_descriptor(HANDLE handle, DeviceProbeSnapshot& snap
     snapshot.usb_bridge_suspected = snapshot.bus_kind == DeviceBusKind::Usb;
 
     if (snapshot.bus_kind != DeviceBusKind::Unknown) {
-        append_evidence(snapshot.evidence, "Windows storage stack reported a concrete device bus type.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::BusKind,
+            EvidenceSource::WindowsStorageQuery,
+            EvidenceConfidence::Observed,
+            "Windows storage stack reported a concrete device bus type.");
     }
 }
 
 DeviceProbeSnapshot probe_windows_device_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
     const fs::path root = path.root_path();
     if (root.empty()) {
-        append_evidence(snapshot.evidence, "Path does not expose a stable root for Windows storage probing.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::PathInspection,
+            EvidenceConfidence::ConservativeFallback,
+            "Path does not expose a stable root for Windows storage probing.");
         return snapshot;
     }
 
     const std::wstring device_path = volume_device_path_from_root(root);
     if (device_path.empty()) {
-        append_evidence(snapshot.evidence, "Windows volume device path could not be derived from the target root.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::WindowsStorageQuery,
+            EvidenceConfidence::ConservativeFallback,
+            "Windows volume device path could not be derived from the target root.");
         return snapshot;
     }
 
@@ -298,14 +422,24 @@ DeviceProbeSnapshot probe_windows_device_capabilities(const fs::path& path, Devi
         0,
         nullptr));
     if (!handle.is_valid()) {
-        append_evidence(snapshot.evidence, "Windows volume handle could not be opened for read-only capability probing.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::WindowsStorageQuery,
+            EvidenceConfidence::ConservativeFallback,
+            "Windows volume handle could not be opened for read-only capability probing.");
         return snapshot;
     }
 
     populate_windows_device_descriptor(handle.get(), snapshot);
     snapshot.trim_support = query_trim_support(handle.get());
     if (snapshot.trim_support != CapabilityState::Unknown) {
-        append_evidence(snapshot.evidence, "Windows storage stack returned trim/discard capability information.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::TrimSupport,
+            EvidenceSource::WindowsStorageQuery,
+            EvidenceConfidence::Observed,
+            "Windows storage stack returned trim/discard capability information.");
     }
 
     return snapshot;
@@ -370,24 +504,47 @@ CapabilityState read_discard_support(const std::string& device_name) {
 DeviceProbeSnapshot probe_linux_device_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
     const auto best_match = find_best_linux_mount_entry(path);
     if (!best_match) {
-        append_evidence(snapshot.evidence, "Linux mount metadata could not be resolved for this path.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::LinuxMountMetadata,
+            EvidenceConfidence::ConservativeFallback,
+            "Linux mount metadata could not be resolved for this path.");
         return snapshot;
     }
 
     if (best_match->source.rfind("/dev/", 0) != 0) {
-        append_evidence(snapshot.evidence, "Linux mount source is not a direct /dev block device.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::LinuxMountMetadata,
+            EvidenceConfidence::ConservativeFallback,
+            "Linux mount source is not a direct /dev block device.");
         return snapshot;
     }
 
     const std::string device_name = normalize_linux_block_device_name(best_match->source);
     if (device_name.empty()) {
-        append_evidence(snapshot.evidence, "Linux block device name could not be normalized from the mount source.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::LinuxMountMetadata,
+            EvidenceConfidence::ConservativeFallback,
+            "Linux block device name could not be normalized from the mount source.");
         return snapshot;
     }
 
     const std::string removable = read_text_file(fs::path("/sys/class/block") / device_name / "removable");
     snapshot.is_removable_media = snapshot.is_removable_media || removable == "1";
     snapshot.trim_support = read_discard_support(device_name);
+    if (snapshot.trim_support != CapabilityState::Unknown) {
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::TrimSupport,
+            EvidenceSource::LinuxSysfs,
+            EvidenceConfidence::Observed,
+            "Linux sysfs exposed trim/discard capability information for this device.");
+    }
 
     std::error_code ec;
     const fs::path sysfs_device = fs::weakly_canonical(fs::path("/sys/class/block") / device_name / "device", ec);
@@ -395,16 +552,42 @@ DeviceProbeSnapshot probe_linux_device_capabilities(const fs::path& path, Device
         const std::string sysfs_path = sysfs_device.string();
         snapshot.bus_kind = infer_linux_bus_kind(sysfs_path, device_name);
         snapshot.usb_bridge_suspected = snapshot.bus_kind == DeviceBusKind::Usb;
+        if (snapshot.bus_kind != DeviceBusKind::Unknown) {
+            append_probe_evidence(
+                snapshot,
+                EvidenceSubject::BusKind,
+                EvidenceSource::LinuxSysfs,
+                EvidenceConfidence::Inferred,
+                "Linux sysfs exposed a concrete device bus hint for this path.");
+        } else {
+            append_probe_evidence(
+                snapshot,
+                EvidenceSubject::Restriction,
+                EvidenceSource::LinuxSysfs,
+                EvidenceConfidence::ConservativeFallback,
+                "Linux sysfs did not expose a concrete device bus classification for this path.");
+        }
+    } else {
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::LinuxSysfs,
+            EvidenceConfidence::ConservativeFallback,
+            "Linux sysfs device metadata could not be resolved for this path.");
     }
 
-    append_evidence(snapshot.evidence, "Linux sysfs and mount metadata were used to infer device capabilities.");
     return snapshot;
 }
 #endif
 
 DeviceProbeSnapshot probe_unsupported_platform_capabilities(const fs::path& path, DeviceProbeSnapshot snapshot) {
     (void)path;
-    append_evidence(snapshot.evidence, "Detailed device capability probing is not implemented on this platform.");
+    append_probe_evidence(
+        snapshot,
+        EvidenceSubject::Restriction,
+        EvidenceSource::PlatformFallback,
+        EvidenceConfidence::ConservativeFallback,
+        "Detailed device capability probing is not implemented on this platform.");
     return snapshot;
 }
 
@@ -416,7 +599,12 @@ DeviceProbeSnapshot SystemDeviceCapabilityProbe::probe(const fs::path& path, Sto
 
     if (storage_kind == StorageKind::NetworkShare) {
         snapshot.bus_kind = DeviceBusKind::Network;
-        append_evidence(snapshot.evidence, "Network-backed paths do not expose a local block device for direct inspection.");
+        append_probe_evidence(
+            snapshot,
+            EvidenceSubject::Restriction,
+            EvidenceSource::PathInspection,
+            EvidenceConfidence::ConservativeFallback,
+            "Network-backed paths do not expose a local block device for direct inspection.");
         return snapshot;
     }
 
@@ -450,6 +638,19 @@ DeviceCapabilities DeviceCapabilityInspector::inspect(const DeviceInspectionCont
     capabilities.is_removable_media = snapshot.is_removable_media;
     capabilities.usb_bridge_suspected = snapshot.usb_bridge_suspected;
     capabilities.evidence = snapshot.evidence;
+    capabilities.evidence_items = snapshot.evidence_items;
+    append_review_state_evidence(
+        capabilities,
+        ReviewKind::DeviceSanitize,
+        capabilities.device_sanitize_review,
+        snapshot,
+        context.storage_kind);
+    append_review_state_evidence(
+        capabilities,
+        ReviewKind::CryptoErase,
+        capabilities.crypto_erase_review,
+        snapshot,
+        context.storage_kind);
     return capabilities;
 }
 

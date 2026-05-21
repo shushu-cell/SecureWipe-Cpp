@@ -46,6 +46,10 @@ void test_cli_inspect_detail_reports_capability_fields() {
                         {"unknown", "refuse", "best-effort-file-overwrite", "best-effort-directory-wipe",
                          "device-sanitize-review", "crypto-erase-review", "manual-review"}),
             "CLI inspect --detail should render the supported erase method labels");
+    require(contains(report, "capability-evidence:"),
+            "CLI inspect --detail should include structured capability evidence lines");
+    require(contains(report, "preflight-action:"),
+            "CLI inspect --detail should include structured preflight action lines");
     require(contains(report, "erase-advice:"), "CLI inspect --detail should include erase path advice lines");
 }
 
@@ -72,6 +76,8 @@ void test_device_capability_inspector_maps_probe_snapshot() {
     require(capabilities.is_removable_media, "DeviceCapabilityInspector should preserve removable-media state");
     require(capabilities.usb_bridge_suspected, "DeviceCapabilityInspector should preserve USB bridge suspicion");
     require(!capabilities.evidence.empty(), "DeviceCapabilityInspector should propagate evidence lines");
+    require(!capabilities.evidence_items.empty(),
+            "DeviceCapabilityInspector should preserve structured evidence items");
 }
 
 void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative() {
@@ -111,8 +117,49 @@ void test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets
     const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
     require(advice.preferred_method == securewipe::EraseMethod::DeviceSanitizeReview,
             "ErasePathAdvisor should escalate SSD-like review paths to device sanitize review");
+        require(!advice.action_candidates.empty(),
+                        "ErasePathAdvisor should emit structured preflight action candidates for review-before-wipe paths");
     require(!advice.reasons.empty() && contains(advice.reasons.front(), "device-level sanitization"),
             "ErasePathAdvisor should explain why device sanitize review was chosen");
+}
+
+void test_erase_path_advisor_adds_preflight_scope_and_risk_flags() {
+        securewipe::InspectionReport report = make_review_before_wipe_report(
+                securewipe::StorageKind::SolidState,
+                securewipe::DeviceBusKind::Nvme);
+        report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Supported;
+
+        const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
+
+        bool saw_underlying_device_preferred = false;
+        bool saw_current_path_available = false;
+        for (const auto& candidate : advice.action_candidates) {
+                if (candidate.method == securewipe::EraseMethod::DeviceSanitizeReview &&
+                        candidate.state == securewipe::ActionCandidateState::Preferred &&
+                        candidate.target_scope == securewipe::ActionTargetScope::UnderlyingDevice) {
+                        saw_underlying_device_preferred = true;
+                }
+
+                if (candidate.method == securewipe::EraseMethod::BestEffortFileOverwrite &&
+                        candidate.state == securewipe::ActionCandidateState::Available &&
+                        candidate.target_scope == securewipe::ActionTargetScope::CurrentPath) {
+                        saw_current_path_available = true;
+                }
+        }
+
+        bool saw_review_risk = false;
+        for (const auto risk : advice.risk_flags) {
+                if (risk == securewipe::PreflightRisk::UnderlyingDeviceReviewRecommended) {
+                        saw_review_risk = true;
+                }
+        }
+
+        require(saw_underlying_device_preferred,
+                        "ErasePathAdvisor should expose the preferred underlying-device review candidate");
+        require(saw_current_path_available,
+                        "ErasePathAdvisor should keep the current-path best-effort option visible as an available fallback");
+        require(saw_review_risk,
+                        "ErasePathAdvisor should emit a structured risk flag when underlying-device review is recommended");
 }
 
 void test_erase_path_advisor_falls_back_to_crypto_erase_review() {
@@ -173,6 +220,7 @@ void run_capability_inspection_tests() {
     test_device_capability_inspector_keeps_rotational_unknown_bus_conservative();
         test_device_capability_inspector_supports_scsi_crypto_erase_review_for_ssd();
     test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets();
+        test_erase_path_advisor_adds_preflight_scope_and_risk_flags();
     test_erase_path_advisor_falls_back_to_crypto_erase_review();
         test_erase_path_advisor_falls_back_to_manual_review_without_supported_reviews();
     test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths();

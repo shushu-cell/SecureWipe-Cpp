@@ -29,6 +29,7 @@ struct DeviceProbeSnapshot {
     bool is_removable_media = false;
     bool usb_bridge_suspected = false;
     std::vector<std::string> evidence;
+    std::vector<CapabilityEvidenceItem> evidence_items;
 };
 
 struct DeviceInspectionContext {

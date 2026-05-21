@@ -86,6 +86,49 @@ constexpr std::array<EnumLabel<EraseMethod>, 7> kEraseMethodLabels{{
     {EraseMethod::ManualReview, "manual-review"sv},
 }};
 
+constexpr std::array<EnumLabel<EvidenceSubject>, 5> kEvidenceSubjectLabels{{
+    {EvidenceSubject::BusKind, "bus-kind"sv},
+    {EvidenceSubject::TrimSupport, "trim-support"sv},
+    {EvidenceSubject::DeviceSanitizeReview, "device-sanitize-review"sv},
+    {EvidenceSubject::CryptoEraseReview, "crypto-erase-review"sv},
+    {EvidenceSubject::Restriction, "restriction"sv},
+}};
+
+constexpr std::array<EnumLabel<EvidenceSource>, 6> kEvidenceSourceLabels{{
+    {EvidenceSource::PathInspection, "path-inspection"sv},
+    {EvidenceSource::WindowsStorageQuery, "windows-storage-query"sv},
+    {EvidenceSource::LinuxMountMetadata, "linux-mount-metadata"sv},
+    {EvidenceSource::LinuxSysfs, "linux-sysfs"sv},
+    {EvidenceSource::HeuristicGuard, "heuristic-guard"sv},
+    {EvidenceSource::PlatformFallback, "platform-fallback"sv},
+}};
+
+constexpr std::array<EnumLabel<EvidenceConfidence>, 3> kEvidenceConfidenceLabels{{
+    {EvidenceConfidence::Observed, "observed"sv},
+    {EvidenceConfidence::Inferred, "inferred"sv},
+    {EvidenceConfidence::ConservativeFallback, "conservative-fallback"sv},
+}};
+
+constexpr std::array<EnumLabel<PreflightRisk>, 5> kPreflightRiskLabels{{
+    {PreflightRisk::NetworkBacked, "network-backed"sv},
+    {PreflightRisk::UsbBridgeSuspected, "usb-bridge-suspected"sv},
+    {PreflightRisk::VirtualizedStorage, "virtualized-storage"sv},
+    {PreflightRisk::PlatformProbeGap, "platform-probe-gap"sv},
+    {PreflightRisk::UnderlyingDeviceReviewRecommended, "underlying-device-review-recommended"sv},
+}};
+
+constexpr std::array<EnumLabel<ActionCandidateState>, 4> kActionCandidateStateLabels{{
+    {ActionCandidateState::Preferred, "preferred"sv},
+    {ActionCandidateState::Available, "available"sv},
+    {ActionCandidateState::Blocked, "blocked"sv},
+    {ActionCandidateState::Unavailable, "unavailable"sv},
+}};
+
+constexpr std::array<EnumLabel<ActionTargetScope>, 2> kActionTargetScopeLabels{{
+    {ActionTargetScope::CurrentPath, "current-path"sv},
+    {ActionTargetScope::UnderlyingDevice, "underlying-device"sv},
+}};
+
 const std::map<std::string, Pattern> kPatternOptions{
     {"zeros", Pattern::Zeros},
     {"random", Pattern::Random},
@@ -263,6 +306,49 @@ std::string_view CommandLineApplication::to_string(EraseMethod method) noexcept 
     return enum_label_or_unknown(method, kEraseMethodLabels);
 }
 
+std::string_view CommandLineApplication::to_string(EvidenceSubject subject) noexcept {
+    return enum_label_or_unknown(subject, kEvidenceSubjectLabels);
+}
+
+std::string_view CommandLineApplication::to_string(EvidenceSource source) noexcept {
+    return enum_label_or_unknown(source, kEvidenceSourceLabels);
+}
+
+std::string_view CommandLineApplication::to_string(EvidenceConfidence confidence) noexcept {
+    return enum_label_or_unknown(confidence, kEvidenceConfidenceLabels);
+}
+
+std::string_view CommandLineApplication::to_string(PreflightRisk risk) noexcept {
+    return enum_label_or_unknown(risk, kPreflightRiskLabels);
+}
+
+std::string_view CommandLineApplication::to_string(ActionCandidateState state) noexcept {
+    return enum_label_or_unknown(state, kActionCandidateStateLabels);
+}
+
+std::string_view CommandLineApplication::to_string(ActionTargetScope target_scope) noexcept {
+    return enum_label_or_unknown(target_scope, kActionTargetScopeLabels);
+}
+
+std::string CommandLineApplication::format_evidence_item(const CapabilityEvidenceItem& item) {
+    return "subject=" + std::string(to_string(item.subject)) +
+           "; source=" + std::string(to_string(item.source)) +
+           "; confidence=" + std::string(to_string(item.confidence)) +
+           "; summary=" + item.summary;
+}
+
+std::string CommandLineApplication::format_action_candidate(const ActionCandidate& candidate) {
+    return "method=" + std::string(to_string(candidate.method)) +
+           "; state=" + std::string(to_string(candidate.state)) +
+           "; scope=" + std::string(to_string(candidate.target_scope)) +
+           "; summary=" + candidate.summary;
+}
+
+std::string CommandLineApplication::format_action_blocker(const ActionCandidate& candidate, std::string_view blocker) {
+    return "method=" + std::string(to_string(candidate.method)) +
+           "; summary=" + std::string(blocker);
+}
+
 int CommandLineApplication::run_inspect(const CommandRequest& request) const {
     const InspectionReport report = inspect_target(request.path);
     if (!report.ok) {
@@ -325,9 +411,28 @@ void CommandLineApplication::print_detailed_inspection_report(const InspectionRe
     write_field(output_, "removable-media", report.device_capabilities.is_removable_media ? "yes"sv : "no"sv);
     write_field(output_, "usb-bridge-suspected", report.device_capabilities.usb_bridge_suspected ? "yes"sv : "no"sv);
     write_field(output_, "preferred-erase-method", to_string(report.erase_path_advice.preferred_method));
-    for (const auto& evidence : report.device_capabilities.evidence) {
-        write_field(output_, "capability-evidence", evidence);
+
+    if (!report.device_capabilities.evidence_items.empty()) {
+        for (const auto& item : report.device_capabilities.evidence_items) {
+            write_field(output_, "capability-evidence", format_evidence_item(item));
+        }
+    } else {
+        for (const auto& evidence : report.device_capabilities.evidence) {
+            write_field(output_, "capability-evidence", evidence);
+        }
     }
+
+    for (const auto risk : report.erase_path_advice.risk_flags) {
+        write_field(output_, "preflight-risk", to_string(risk));
+    }
+
+    for (const auto& candidate : report.erase_path_advice.action_candidates) {
+        write_field(output_, "preflight-action", format_action_candidate(candidate));
+        for (const auto& blocker : candidate.blockers) {
+            write_field(output_, "preflight-blocker", format_action_blocker(candidate, blocker));
+        }
+    }
+
     for (const auto& reason : report.erase_path_advice.reasons) {
         write_field(output_, "erase-advice", reason);
     }

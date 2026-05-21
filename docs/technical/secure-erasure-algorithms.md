@@ -74,6 +74,14 @@
 2. `DeviceCapabilityInspector` 再通过只读平台探测补入 `DeviceCapabilities`。
 3. `ErasePathAdvisor` 基于基础 recommendation 与能力快照生成 `ErasePathAdvice`。
 
+当前第一阶段实现把“结构化预执行计划”收敛为既有聚合对象上的增量字段，而不是新增顶层计划类型：
+
+- `DeviceCapabilities::evidence_items` 保存结构化证据项，显式区分主题、来源、置信度和摘要
+- `ErasePathAdvice::risk_flags` 保存结构化风险标记
+- `ErasePathAdvice::action_candidates` 保存候选动作、目标范围和阻塞原因
+
+这样做的目的是先把读路径的证据与建议稳定建模，再决定后续是否需要更高层的导出格式或执行编排。
+
 当前平台策略是：
 
 - Windows：通过 `IOCTL_STORAGE_QUERY_PROPERTY`、`STORAGE_DEVICE_DESCRIPTOR` 和 `DEVICE_TRIM_DESCRIPTOR` 收集 bus type、可移动介质线索和 trim/discard 线索
@@ -86,7 +94,7 @@
 - `CapabilityState` 强制区分 `Unknown / Unsupported / Supported / Restricted`
 - `EraseMethod` 当前只表达“更适合 review 哪条路径”，不表达 destructive device command 已可执行
 
-因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。这和[项目输出里几个最容易误解的词](background-and-terms.md#project-terms)中的定义保持一致。
+因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。同理，`preflight-action` 中的 `scope=underlying-device` 表示“建议把注意力放到底层设备级路径”，不是“CLI 下一步就会自动执行设备命令”。这和[项目输出里几个最容易误解的词](background-and-terms.md#project-terms)中的定义保持一致。
 
 ### 单文件安全擦除工作流
 
@@ -176,8 +184,8 @@ flowchart TD
 | 算法职责 | 公共入口 | 主要实现位置 | 说明 |
 |---|---|---|---|
 | 路径检查与 recommendation | [inspect_target(...)][secure-wipe-header] | [src/path_inspector.cpp][path-inspector-src] | 生成 [InspectionReport][secure-wipe-header]，是所有破坏性操作前的安全入口。 |
-| 设备能力探测 | [inspect_target(...)][secure-wipe-header] | [src/device_capability_inspector.cpp][device-capability-inspector-src] | 通过只读平台探测补入 [DeviceCapabilities][secure-wipe-header]。 |
-| 擦除路径解释 | [inspect_target(...)][secure-wipe-header] | [src/erase_path_advisor.cpp][erase-path-advisor-src] | 基于 recommendation 与能力快照生成 [ErasePathAdvice][secure-wipe-header]。 |
+| 设备能力探测 | [inspect_target(...)][secure-wipe-header] | [src/device_capability_inspector.cpp][device-capability-inspector-src] | 通过只读平台探测补入 [DeviceCapabilities][secure-wipe-header]，并生成结构化 `evidence_items`。 |
+| 擦除路径解释 | [inspect_target(...)][secure-wipe-header] | [src/erase_path_advisor.cpp][erase-path-advisor-src] | 基于 recommendation 与能力快照生成 [ErasePathAdvice][secure-wipe-header]，包括结构化风险和候选动作。 |
 | 单文件擦除 | [wipe_file(...)][secure-wipe-header] | [src/file_wiper.cpp][file-wiper-src] + [src/native_file.cpp][native-file-src] | 负责覆盖、刷新、截断、改名和删除。 |
 | 目录擦除 | [wipe_directory(...)][secure-wipe-header] | [src/directory_wiper.cpp][directory-wiper-src] | 负责扫描、dry-run、聚合和目录清理。 |
 | 公共 API 到内部引擎的转发 | [include/secure_wipe.h][secure-wipe-header] + [src/secure_wipe.cpp][secure-wipe-src] | [src/secure_wipe.cpp][secure-wipe-src] | 通过 facade 组合内部对象，而不是把算法细节暴露到公共头文件。 |

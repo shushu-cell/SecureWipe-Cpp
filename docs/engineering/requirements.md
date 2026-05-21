@@ -13,7 +13,7 @@
 
 SecureWipe-Cpp 当前选择的工程策略是：先交付一个具备路径检查、风险提示、best-effort 文件/目录擦除和可验证工程基线的 CLI/库，再在明确边界的前提下逐步扩展能力。
 
-当前版本已经在 `inspect` 路径上补入了一层**非破坏性的设备能力探测与擦除路径解释**，用于提升 recommendation 的可解释性，但仍然没有进入真实设备级 destructive command 执行。
+当前版本已经在 `inspect` 路径上补入了一层**非破坏性的设备能力探测、结构化证据与擦除路径解释**，用于提升 recommendation 的可解释性，但仍然没有进入真实设备级 destructive command 执行。
 
 ## 产品目标
 
@@ -68,6 +68,7 @@ flowchart TB
 | FR-07 | 系统必须保留公共 API 边界 | 外部调用方只依赖 [include/secure_wipe.h][secure-wipe-header]，不依赖实现层私有头 |
 | FR-08 | 系统必须提供帮助与使用说明 | CLI 可生成帮助信息，工程文档可解释命令、边界与架构 |
 | FR-09 | 系统必须提供非破坏性的设备能力解释 | `inspect --detail` 应能输出设备总线、trim/discard 线索、设备级路径 review 状态和解释文本 |
+| FR-10 | 系统必须输出结构化预执行信息 | `inspect --detail` 应在保留解释文本的同时输出结构化证据、风险标记和候选动作，且范围保持只读 |
 
 ## 非功能需求
 
@@ -78,14 +79,16 @@ flowchart TB
 | NFR-03 | 可移植性 | 使用 C++20、CMake、CLI11，支持 Windows / Linux / macOS 开发流程 |
 | NFR-04 | 可测试性 | 使用 CTest 覆盖 inspect、wipe、wipe-dir 和 CLI 参数回归 |
 | NFR-07 | 保守语义 | 对“未知”“受限”“已支持”必须显式区分，避免把启发式推断写成设备级能力确认 |
+| NFR-08 | 结构化输出必须可回退解释文本 | 第一阶段结构化预执行实现应挂接在既有 `DeviceCapabilities` / `ErasePathAdvice` 上，并保留人类可读原因文本 |
 | NFR-05 | 可文档化 | 使用 MkDocs Material 维护 docs-as-code，并通过 [mkdocs.yml][mkdocs-yml] 对应的 `mkdocs build --strict` 校验 |
 | NFR-06 | 可重复构建 | 将 CLI11 vendored 到仓库，避免构建过程依赖运行时下载第三方库 |
 
 ## 约束与假设
 
-- 当前版本聚焦文件级和目录级 best-effort 擦除，以及非破坏性的设备能力探测；不实现设备级 sanitize 执行。
+- 当前版本聚焦文件级和目录级 best-effort 擦除，以及非破坏性的设备能力探测与结构化预执行解释；不实现设备级 sanitize 执行。
 - 当前版本的风险提示是显式产品行为，而不是附带说明；用户必须看到“best-effort only”的边界。
 - 当前 CLI 是主要交付入口，但库接口同样视为正式工程资产。
+- 当前阶段不会引入新的顶层执行计划对象、JSON 导出或设备级 destructive orchestration。
 - 当前文档默认与当前代码状态绑定，不能把未来规划写成已交付能力。
 
 ## 验收口径
@@ -106,7 +109,7 @@ flowchart TB
 | FR-03 | [FileWiper][file-wiper-src]、[wipe_file(...)][secure-wipe-header]、CLI `wipe` | 文件擦除测试与 CLI 参数测试 |
 | FR-04 | [DirectoryWiper][directory-wiper-src]、[wipe_directory(...)][secure-wipe-header]、CLI `wipe-dir` | dry-run、确认执行和参数回归测试 |
 | FR-05 | [PathInspector][path-inspector-src]、CLI 返回码控制 | 危险目录与拒绝路径测试 |
-| FR-09 | [DeviceCapabilityInspector][device-capability-inspector-src]、[ErasePathAdvisor][erase-path-advisor-src]、CLI `inspect --detail` | fake probe 测试、advisor 映射测试、详细输出测试 |
+| FR-09 / FR-10 | [DeviceCapabilityInspector][device-capability-inspector-src]、[ErasePathAdvisor][erase-path-advisor-src]、CLI `inspect --detail` | fake probe 测试、advisor 映射测试、详细输出测试 |
 | FR-07 | [include/secure_wipe.h][secure-wipe-header] 与 [src/internal/][src-internal-dir] 边界 | 代码审查、架构文档与构建检查 |
 | NFR-05 | [docs/][docs-dir]、[mkdocs.yml][mkdocs-yml] | `mkdocs build --strict` |
 

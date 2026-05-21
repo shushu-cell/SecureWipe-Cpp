@@ -26,7 +26,7 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 其中 [`inspect_target(...)`][inspect-target-def] 现在会返回两层结果：
 
 - 原有的粗粒度安全结论：`target_kind`、`storage_kind`、`recommendation`
-- 新增的非破坏性能力与路径解释：`device_capabilities`、`erase_path_advice`
+- 新增的非破坏性能力、结构化证据与路径解释：`device_capabilities`、`erase_path_advice`
 
 ## 值类型
 
@@ -110,6 +110,80 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - `CryptoEraseReview`
 - `ManualReview`
 
+### [`EvidenceSubject`][evidence-subject-def]
+
+描述一条结构化证据正在说明什么主题：
+
+- `BusKind`
+- `TrimSupport`
+- `DeviceSanitizeReview`
+- `CryptoEraseReview`
+- `Restriction`
+
+### [`EvidenceSource`][evidence-source-def]
+
+描述这条证据主要来自哪一类只读探测来源：
+
+- `PathInspection`
+- `WindowsStorageQuery`
+- `LinuxMountMetadata`
+- `LinuxSysfs`
+- `HeuristicGuard`
+- `PlatformFallback`
+
+### [`EvidenceConfidence`][evidence-confidence-def]
+
+显式区分证据是直接观察、推断还是保守回退：
+
+- `Observed`
+- `Inferred`
+- `ConservativeFallback`
+
+### [`PreflightRisk`][preflight-risk-def]
+
+描述 `inspect --detail` 在当前路径上识别出的结构化预执行风险：
+
+- `NetworkBacked`
+- `UsbBridgeSuspected`
+- `VirtualizedStorage`
+- `PlatformProbeGap`
+- `UnderlyingDeviceReviewRecommended`
+
+### [`ActionCandidateState`][action-candidate-state-def]
+
+描述某条候选动作在当前上下文中的可用状态：
+
+- `Preferred`
+- `Available`
+- `Blocked`
+- `Unavailable`
+
+### [`ActionTargetScope`][action-target-scope-def]
+
+描述候选动作面向的目标范围：
+
+- `CurrentPath`
+- `UnderlyingDevice`
+
+### [`CapabilityEvidenceItem`][capability-evidence-item-def]
+
+结构化能力证据值对象，核心字段包括：
+
+- `subject`
+- `source`
+- `confidence`
+- `summary`
+
+### [`ActionCandidate`][action-candidate-def]
+
+结构化预执行候选动作值对象，核心字段包括：
+
+- `method`
+- `state`
+- `target_scope`
+- `summary`
+- `blockers`
+
 ### [`DeviceCapabilities`][device-capabilities-def]
 
 非破坏性的设备能力视图，核心字段包括：
@@ -121,6 +195,9 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - `is_removable_media`
 - `usb_bridge_suspected`
 - `evidence`
+- `evidence_items`
+
+其中 `evidence` 继续保留为面向人类阅读的解释文本，`evidence_items` 则提供后续机器可消费的结构化证据入口。
 
 ### [`ErasePathAdvice`][erase-path-advice-def]
 
@@ -128,6 +205,10 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 
 - `preferred_method`
 - `reasons`
+- `risk_flags`
+- `action_candidates`
+
+这组字段仍然是“预执行解释”，不是独立的顶层执行计划对象，也不是设备级 destructive command 已确认可执行的声明。
 
 ### [`InspectionReport`][inspection-report-def]
 
@@ -146,6 +227,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - `warnings`
 
 [`InspectionReport`][inspection-report-def] 的新增能力字段仍然属于“探测与解释”，不是“设备级 destructive command 已确认可执行”的承诺。
+
+当前第一阶段实现刻意保持公共 API 为增量扩展：结构化证据和结构化预执行信息都挂接在既有聚合对象下，而不是提前引入新的顶层 `InspectPreflightPlan` 类型。
 
 ### [`WipeResult`][wipe-result-def]
 
@@ -178,10 +261,18 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 [device-bus-kind-def]: ../../include/secure_wipe.h#L46
 [capability-state-def]: ../../include/secure_wipe.h#L57
 [erase-method-def]: ../../include/secure_wipe.h#L64
-[device-capabilities-def]: ../../include/secure_wipe.h#L74
-[erase-path-advice-def]: ../../include/secure_wipe.h#L84
-[wipe-result-def]: ../../include/secure_wipe.h#L89
-[inspection-report-def]: ../../include/secure_wipe.h#L98
-[inspect-target-def]: ../../include/secure_wipe.h#L112
-[wipe-file-def]: ../../include/secure_wipe.h#L113
-[wipe-directory-def]: ../../include/secure_wipe.h#L114
+[evidence-subject-def]: ../../include/secure_wipe.h#L74
+[evidence-source-def]: ../../include/secure_wipe.h#L82
+[evidence-confidence-def]: ../../include/secure_wipe.h#L91
+[preflight-risk-def]: ../../include/secure_wipe.h#L97
+[action-candidate-state-def]: ../../include/secure_wipe.h#L105
+[action-target-scope-def]: ../../include/secure_wipe.h#L112
+[capability-evidence-item-def]: ../../include/secure_wipe.h#L117
+[action-candidate-def]: ../../include/secure_wipe.h#L124
+[device-capabilities-def]: ../../include/secure_wipe.h#L132
+[erase-path-advice-def]: ../../include/secure_wipe.h#L143
+[wipe-result-def]: ../../include/secure_wipe.h#L150
+[inspection-report-def]: ../../include/secure_wipe.h#L159
+[inspect-target-def]: ../../include/secure_wipe.h#L173
+[wipe-file-def]: ../../include/secure_wipe.h#L174
+[wipe-directory-def]: ../../include/secure_wipe.h#L175

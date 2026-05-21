@@ -1,6 +1,7 @@
 #include "internal/secure_wipe_engine.h"
 
 #include <array>
+#include <optional>
 #include <ranges>
 
 namespace securewipe::detail {
@@ -64,6 +65,101 @@ void add_reason(std::vector<std::string>& reasons, std::string_view reason) {
     reasons.emplace_back(reason);
 }
 
+void add_risk_flag(ErasePathAdvice& advice, PreflightRisk risk) {
+    if (std::ranges::find(advice.risk_flags, risk) == advice.risk_flags.end()) {
+        advice.risk_flags.push_back(risk);
+    }
+}
+
+void add_candidate_blocker(ActionCandidate& candidate, std::string_view blocker) {
+    candidate.blockers.emplace_back(blocker);
+}
+
+void add_action_candidate(ErasePathAdvice& advice, ActionCandidate candidate) {
+    advice.action_candidates.push_back(std::move(candidate));
+}
+
+bool has_platform_probe_gap(const DeviceCapabilities& capabilities) {
+    return std::ranges::any_of(capabilities.evidence_items, [](const CapabilityEvidenceItem& item) {
+        return item.source == EvidenceSource::PlatformFallback;
+    }) || (capabilities.bus_kind == DeviceBusKind::Unknown && capabilities.trim_support == CapabilityState::Unknown);
+}
+
+void append_common_preflight_risks(ErasePathAdvice& advice, const InspectionReport& report) {
+    if (report.storage_kind == StorageKind::NetworkShare ||
+        report.device_capabilities.bus_kind == DeviceBusKind::Network) {
+        add_risk_flag(advice, PreflightRisk::NetworkBacked);
+    }
+
+    if (report.device_capabilities.usb_bridge_suspected) {
+        add_risk_flag(advice, PreflightRisk::UsbBridgeSuspected);
+    }
+
+    if (report.device_capabilities.bus_kind == DeviceBusKind::Virtual) {
+        add_risk_flag(advice, PreflightRisk::VirtualizedStorage);
+    }
+
+    if (has_platform_probe_gap(report.device_capabilities)) {
+        add_risk_flag(advice, PreflightRisk::PlatformProbeGap);
+    }
+
+    if (report.recommendation == StrategyRecommendation::ReviewBeforeWipe) {
+        add_risk_flag(advice, PreflightRisk::UnderlyingDeviceReviewRecommended);
+    }
+}
+
+ActionCandidateState direct_mapping_state(EraseMethod method) noexcept {
+    switch (method) {
+    case EraseMethod::Refuse:
+        return ActionCandidateState::Blocked;
+    case EraseMethod::Unknown:
+        return ActionCandidateState::Unavailable;
+    case EraseMethod::BestEffortFileOverwrite:
+    case EraseMethod::BestEffortDirectoryWipe:
+    case EraseMethod::DeviceSanitizeReview:
+    case EraseMethod::CryptoEraseReview:
+    case EraseMethod::ManualReview:
+        return ActionCandidateState::Preferred;
+    }
+
+    return ActionCandidateState::Unavailable;
+}
+
+std::optional<EraseMethod> current_path_candidate_method(const InspectionReport& report) {
+    switch (report.target_kind) {
+    case TargetKind::RegularFile:
+        return EraseMethod::BestEffortFileOverwrite;
+    case TargetKind::Directory:
+        return EraseMethod::BestEffortDirectoryWipe;
+    case TargetKind::Missing:
+    case TargetKind::Symlink:
+    case TargetKind::Other:
+        return std::nullopt;
+    }
+
+    return std::nullopt;
+}
+
+std::string_view current_path_candidate_summary(const InspectionReport& report) {
+    return report.target_kind == TargetKind::Directory
+        ? "Best-effort directory wipe remains available for the current path, but media caveats should be reviewed first."
+        : "Best-effort file overwrite remains available for the current path, but media caveats should be reviewed first.";
+}
+
+void append_current_path_candidate(ErasePathAdvice& advice, const InspectionReport& report) {
+    const auto method = current_path_candidate_method(report);
+    if (!method.has_value()) {
+        return;
+    }
+
+    add_action_candidate(advice, ActionCandidate{
+        .method = *method,
+        .state = ActionCandidateState::Available,
+        .target_scope = ActionTargetScope::CurrentPath,
+        .summary = std::string(current_path_candidate_summary(report)),
+    });
+}
+
 const DirectAdviceMapping* find_direct_advice_mapping(StrategyRecommendation recommendation) {
     const auto entry = std::ranges::find(
         kDirectAdviceMappings,
@@ -72,10 +168,22 @@ const DirectAdviceMapping* find_direct_advice_mapping(StrategyRecommendation rec
     return entry != kDirectAdviceMappings.end() ? &*entry : nullptr;
 }
 
-void append_direct_recommendation_advice(ErasePathAdvice& advice, StrategyRecommendation recommendation) {
+void append_direct_recommendation_advice(ErasePathAdvice& advice, const InspectionReport& report) {
+    const StrategyRecommendation recommendation = report.recommendation;
     if (const DirectAdviceMapping* mapping = find_direct_advice_mapping(recommendation); mapping != nullptr) {
         advice.preferred_method = mapping->preferred_method;
         add_reason(advice.reasons, mapping->primary_reason);
+
+        ActionCandidate candidate{
+            .method = mapping->preferred_method,
+            .state = direct_mapping_state(mapping->preferred_method),
+            .target_scope = ActionTargetScope::CurrentPath,
+            .summary = std::string(mapping->primary_reason),
+        };
+        if (candidate.state == ActionCandidateState::Blocked && !report.message.empty()) {
+            add_candidate_blocker(candidate, report.message);
+        }
+        add_action_candidate(advice, std::move(candidate));
     }
 }
 
@@ -97,18 +205,39 @@ ReviewSelection select_review_before_wipe_method(const DeviceCapabilities& capab
     };
 }
 
-void append_review_before_wipe_reasons(ErasePathAdvice& advice, const DeviceCapabilities& capabilities) {
+void append_review_before_wipe_reasons(ErasePathAdvice& advice, const InspectionReport& report) {
+    const DeviceCapabilities& capabilities = report.device_capabilities;
     const ReviewSelection selection = select_review_before_wipe_method(capabilities);
     advice.preferred_method = selection.preferred_method;
     add_reason(advice.reasons, selection.primary_reason);
 
+    ActionCandidate device_candidate{
+        .method = selection.preferred_method,
+        .state = ActionCandidateState::Preferred,
+        .target_scope = ActionTargetScope::UnderlyingDevice,
+        .summary = std::string(selection.primary_reason),
+    };
+
     if (capabilities.usb_bridge_suspected) {
-        add_reason(advice.reasons, "USB-attached storage can hide the underlying device capabilities from non-destructive inspection.");
+        const std::string_view blocker = "USB-attached storage can hide the underlying device capabilities from non-destructive inspection.";
+        add_reason(advice.reasons, blocker);
+        add_candidate_blocker(device_candidate, blocker);
     }
 
     if (capabilities.device_sanitize_review == CapabilityState::Restricted) {
-        add_reason(advice.reasons, "Available evidence suggests that direct device-level sanitization may be restricted from this path.");
+        const std::string_view blocker = "Available evidence suggests that direct device-level sanitization may be restricted from this path.";
+        add_reason(advice.reasons, blocker);
+        add_candidate_blocker(device_candidate, blocker);
     }
+
+    if (selection.preferred_method == EraseMethod::ManualReview && device_candidate.blockers.empty()) {
+        add_candidate_blocker(
+            device_candidate,
+            "Available signals are not sufficient to select a concrete underlying-device review path automatically.");
+    }
+
+    add_action_candidate(advice, std::move(device_candidate));
+    append_current_path_candidate(advice, report);
 }
 
 } // namespace
@@ -121,12 +250,14 @@ ErasePathAdvice ErasePathAdvisor::advise(const InspectionReport& report) const {
         return advice;
     }
 
+    append_common_preflight_risks(advice, report);
+
     if (report.recommendation == StrategyRecommendation::ReviewBeforeWipe) {
-        append_review_before_wipe_reasons(advice, report.device_capabilities);
+        append_review_before_wipe_reasons(advice, report);
         return advice;
     }
 
-    append_direct_recommendation_advice(advice, report.recommendation);
+    append_direct_recommendation_advice(advice, report);
 
     return advice;
 }
