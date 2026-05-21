@@ -50,7 +50,7 @@ flowchart TB
 
 ## 主要使用场景
 
-1. 用户在执行破坏性操作前，先通过 `inspect <path>` 或 `inspect --detail <path>` 判断目标类型、危险标记、设备能力线索和推荐策略。
+1. 用户在执行破坏性操作前，先通过 `inspect <path>`、`inspect --detail <path>` 或 `inspect --json <path>` 判断目标类型、危险标记、设备能力线索和推荐策略。
 2. 用户对单个敏感文件执行 best-effort 覆盖、截断和删除操作。
 3. 用户对目录执行 dry-run，确认将被处理的范围后再显式执行真实擦除。
 4. 上层程序通过公共库 API 复用路径检查或擦除能力，而不是直接依赖 CLI 进程输出。
@@ -68,7 +68,7 @@ flowchart TB
 | FR-07 | 系统必须保留公共 API 边界 | 外部调用方只依赖 [include/secure_wipe.h][secure-wipe-header]，不依赖实现层私有头 |
 | FR-08 | 系统必须提供帮助与使用说明 | CLI 可生成帮助信息，工程文档可解释命令、边界与架构 |
 | FR-09 | 系统必须提供非破坏性的设备能力解释 | `inspect --detail` 应能输出设备总线、trim/discard 线索、设备级路径 review 状态和解释文本 |
-| FR-10 | 系统必须输出结构化预执行信息 | `inspect --detail` 应在保留解释文本的同时输出结构化证据、风险标记和候选动作，且范围保持只读 |
+| FR-10 | 系统必须输出结构化预执行信息 | `inspect --detail` 应在保留解释文本的同时输出结构化证据、风险标记和候选动作，`inspect --json` 应能导出同一份只读 schema 的机器可读表示 |
 
 ## 非功能需求
 
@@ -88,7 +88,7 @@ flowchart TB
 - 当前版本聚焦文件级和目录级 best-effort 擦除，以及非破坏性的设备能力探测与结构化预执行解释；不实现设备级 sanitize 执行。
 - 当前版本的风险提示是显式产品行为，而不是附带说明；用户必须看到“best-effort only”的边界。
 - 当前 CLI 是主要交付入口，但库接口同样视为正式工程资产。
-- 当前阶段不会引入新的顶层执行计划对象、JSON 导出或设备级 destructive orchestration。
+- 当前阶段不会引入新的顶层执行计划对象或设备级 destructive orchestration；`inspect --json` 仅导出现有 inspection report 的只读序列化结果。
 - 当前文档默认与当前代码状态绑定，不能把未来规划写成已交付能力。
 
 ## 验收口径
@@ -109,7 +109,7 @@ flowchart TB
 | FR-03 | [FileWiper][file-wiper-src]、[wipe_file(...)][secure-wipe-header]、CLI `wipe` | 文件擦除测试与 CLI 参数测试 |
 | FR-04 | [DirectoryWiper][directory-wiper-src]、[wipe_directory(...)][secure-wipe-header]、CLI `wipe-dir` | dry-run、确认执行和参数回归测试 |
 | FR-05 | [PathInspector][path-inspector-src]、CLI 返回码控制 | 危险目录与拒绝路径测试 |
-| FR-09 / FR-10 | [DeviceCapabilityInspector][device-capability-inspector-src]、[ErasePathAdvisor][erase-path-advisor-src]、CLI `inspect --detail` | fake probe 测试、advisor 映射测试、详细输出测试 |
+| FR-09 / FR-10 | [DeviceCapabilityInspector][device-capability-inspector-src]、[ErasePathAdvisor][erase-path-advisor-src]、CLI `inspect --detail` / `inspect --json` | fake probe 测试、advisor 映射测试、详细输出测试、JSON 输出测试 |
 | FR-07 | [include/secure_wipe.h][secure-wipe-header] 与 [src/internal/][src-internal-dir] 边界 | 代码审查、架构文档与构建检查 |
 | NFR-05 | [docs/][docs-dir]、[mkdocs.yml][mkdocs-yml] | `mkdocs build --strict` |
 

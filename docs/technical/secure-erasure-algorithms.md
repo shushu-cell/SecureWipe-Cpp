@@ -80,7 +80,9 @@
 - `ErasePathAdvice::risk_flags` 保存结构化风险标记
 - `ErasePathAdvice::action_candidates` 保存候选动作、目标范围和阻塞原因
 
-这样做的目的是先把读路径的证据与建议稳定建模，再决定后续是否需要更高层的导出格式或执行编排。
+当前 CLI 还通过 `inspect --json` 暴露同一份 [InspectionReport][secure-wipe-header] 的 JSON 序列化，让自动化流程可以直接消费这些字段，而无需重新解析文本输出。
+
+这样做的目的是先把读路径的证据与建议稳定建模，再决定后续是否需要更高层的独立导出格式或执行编排。
 
 当前平台策略是：
 
@@ -94,7 +96,7 @@
 - `CapabilityState` 强制区分 `Unknown / Unsupported / Supported / Restricted`
 - `EraseMethod` 当前只表达“更适合 review 哪条路径”，不表达 destructive device command 已可执行
 
-因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。同理，`preflight-action` 中的 `scope=underlying-device` 表示“建议把注意力放到底层设备级路径”，不是“CLI 下一步就会自动执行设备命令”。这和[项目输出里几个最容易误解的词](background-and-terms.md#project-terms)中的定义保持一致。
+因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。同理，`preflight-action` 中的 `scope=underlying-device` 表示“建议把注意力放到底层设备级路径”，不是“CLI 下一步就会自动执行设备命令”；`inspect --json` 也不会改变这些语义，只是把同一份字段换成机器可读形式。这和[项目输出里几个最容易误解的词](background-and-terms.md#project-terms)中的定义保持一致。
 
 ### 单文件安全擦除工作流
 
@@ -162,6 +164,7 @@ flowchart TD
 | `inspect` 先行 | 已采用 | 先判断目标类型、危险度和介质线索，比“直接执行再报错”更符合安全优先原则。 |
 | `Zeros` 作为默认覆盖模式 | 已采用 | 行为确定、易于测试、实现简单，不会制造“复杂模式一定更安全”的误导。 |
 | `Random` 作为可选模式 | 已采用 | 提供另一种覆盖形态，但仍然明确属于文件级 best-effort。 |
+| `inspect --json` 作为可选导出 | 已采用 | 复用现有 `InspectionReport` / `DeviceCapabilities` / `ErasePathAdvice` 语义，为自动化流程提供机器可读的只读 preflight 结果。 |
 | 可配置 `passes` | 已采用 | 保留 CLI/API 灵活性，同时不把多次覆盖表述为 SSD 上的强保证。 |
 | 覆盖后 `flush` | 已采用 | 让应用层至少显式执行刷新步骤，而不是只依赖进程结束时的隐式落盘。 |
 | 截断 + 尽力改名 + 删除 | 已采用 | 在应用层进一步减少可见文件内容与文件名残留，但仍保持“best-effort only”的表述。 |

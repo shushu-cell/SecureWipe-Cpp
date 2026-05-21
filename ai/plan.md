@@ -897,3 +897,42 @@
 
 - `cmake --build build` 通过。
 - `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+
+## 2026-05-21 结构化证据与预执行计划 JSON 导出跟进
+
+### 本轮目标
+
+在不改变 read-only preflight 边界的前提下，为现有 `InspectionReport` 增加一个**可选的机器可读导出路径**，避免自动化调用方继续解析 `inspect --detail` 文本输出。
+
+### 本轮已落地的实现范围
+
+- CLI 新增 `inspect --json <path>`。
+- JSON 导出直接复用现有 `InspectionReport` 对象图，键名保持 snake_case。
+- JSON 中继续保留：
+  - 基础 inspect 字段
+  - `device_capabilities.evidence`
+  - `device_capabilities.evidence_items`
+  - `erase_path_advice.reasons`
+  - `erase_path_advice.risk_flags`
+  - `erase_path_advice.action_candidates`
+- `--json` 输出的是完整 inspection result；即使与 `--detail` 同时传入，也仍以 JSON 为唯一输出格式。
+
+### 本轮刻意保持的边界
+
+- 仍然不引入独立顶层 `InspectPreflightPlan` 公共类型。
+- 仍然不输出完整敏感设备标识。
+- 仍然不进入 ATA / NVMe / PSID destructive command 执行。
+- JSON 只是现有 read-only inspection report 的序列化，不是独立执行计划文件。
+
+### 同步更新
+
+- `tests/` 已新增 `inspect --json` 的 schema 级断言。
+- `docs/` 已同步更新 CLI、API、requirements、architecture、safety、algorithm 与术语说明。
+
+### 验证口径
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- `python tools/validate_docs_code_links.py`
+- `.venv\Scripts\python -m mkdocs build --strict`

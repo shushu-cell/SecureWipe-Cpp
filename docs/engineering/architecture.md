@@ -158,6 +158,7 @@ flowchart TB
 - 校验参数组合是否合法
 - 控制输出和退出码
 - 在 `inspect --detail` 中同时渲染稳定字段、结构化证据和结构化预执行候选动作
+- 在 `inspect --json` 中把同一份 read-only [InspectionReport][secure-wipe-header] 序列化为 JSON，而不是重新拼装平行计划对象
 - 作为 CLI 的唯一应用层对象
 
 ## 运行时视图

@@ -28,6 +28,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - 原有的粗粒度安全结论：`target_kind`、`storage_kind`、`recommendation`
 - 新增的非破坏性能力、结构化证据与路径解释：`device_capabilities`、`erase_path_advice`
 
+CLI 层当前还提供 `inspect --json <path>`，直接把同一份 [`InspectionReport`][inspection-report-def] 序列化为 JSON；键名保持 snake_case，并继续复用现有公共字段语义，而不是引入平行的顶层 preflight schema。
+
 ## 值类型
 
 ### [`Pattern`][pattern-def]
@@ -199,6 +201,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 
 其中 `evidence` 继续保留为面向人类阅读的解释文本，`evidence_items` 则提供后续机器可消费的结构化证据入口。
 
+当前 `inspect --json` 会同时导出这两组字段，便于调用方在保留解释文本的同时消费结构化 evidence。
+
 ### [`ErasePathAdvice`][erase-path-advice-def]
 
 更细粒度的推荐结果，核心字段包括：
@@ -209,6 +213,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - `action_candidates`
 
 这组字段仍然是“预执行解释”，不是独立的顶层执行计划对象，也不是设备级 destructive command 已确认可执行的声明。
+
+当前 `inspect --json` 会直接导出 `preferred_method`、`reasons`、`risk_flags` 与 `action_candidates`，但它们仍然只表示 read-only preflight 解释。
 
 ### [`InspectionReport`][inspection-report-def]
 
@@ -229,6 +235,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 [`InspectionReport`][inspection-report-def] 的新增能力字段仍然属于“探测与解释”，不是“设备级 destructive command 已确认可执行”的承诺。
 
 当前第一阶段实现刻意保持公共 API 为增量扩展：结构化证据和结构化预执行信息都挂接在既有聚合对象下，而不是提前引入新的顶层 `InspectPreflightPlan` 类型。
+
+当前 CLI JSON 导出同样遵循这条边界：它只是把 [`InspectionReport`][inspection-report-def] 按 snake_case 键序列化出来，而不是再维护一份并行对象图。
 
 ### [`WipeResult`][wipe-result-def]
 

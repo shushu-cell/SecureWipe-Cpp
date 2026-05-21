@@ -53,6 +53,36 @@ void test_cli_inspect_detail_reports_capability_fields() {
     require(contains(report, "erase-advice:"), "CLI inspect --detail should include erase path advice lines");
 }
 
+void test_cli_inspect_json_exports_structured_preflight_schema() {
+    TempDir temp;
+    const fs::path file = temp.path() / "sample.json.txt";
+    write_text_file(file, "secret");
+
+    std::ostringstream output;
+    std::ostringstream error_output;
+    securewipe::app::CommandLineApplication application(output, error_output);
+
+    const int exit_code = application.run({"inspect", "--json", file.string()});
+    require(exit_code == 0, "CLI inspect --json should succeed for a regular file");
+    require(error_output.str().empty(), "CLI inspect --json should not emit stderr on success");
+
+    const std::string report = output.str();
+    require(!report.empty() && report.front() == '{',
+            "CLI inspect --json should emit a JSON object");
+    require(contains(report, "\"device_capabilities\":"),
+            "CLI inspect --json should include device_capabilities");
+    require(contains(report, "\"evidence_items\":"),
+            "CLI inspect --json should include structured evidence items");
+    require(contains(report, "\"erase_path_advice\":"),
+            "CLI inspect --json should include erase_path_advice");
+    require(contains(report, "\"risk_flags\":"),
+            "CLI inspect --json should include structured preflight risk flags");
+    require(contains(report, "\"action_candidates\":"),
+            "CLI inspect --json should include structured action candidates");
+    require(contains(report, "\"target_scope\":"),
+            "CLI inspect --json should serialize action target scope labels");
+}
+
 void test_device_capability_inspector_maps_probe_snapshot() {
     FakeDeviceCapabilityProbe probe;
     probe.snapshot.bus_kind = securewipe::DeviceBusKind::Usb;
@@ -216,6 +246,7 @@ void test_erase_path_advisor_reports_unknown_when_no_recommendation_exists() {
 
 void run_capability_inspection_tests() {
     test_cli_inspect_detail_reports_capability_fields();
+        test_cli_inspect_json_exports_structured_preflight_schema();
     test_device_capability_inspector_maps_probe_snapshot();
     test_device_capability_inspector_keeps_rotational_unknown_bus_conservative();
         test_device_capability_inspector_supports_scsi_crypto_erase_review_for_ssd();

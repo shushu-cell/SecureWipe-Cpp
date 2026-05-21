@@ -6,6 +6,7 @@
 securewipe --help
 securewipe inspect <path>
 securewipe inspect --detail <path>
+securewipe inspect --json <path>
 securewipe wipe <path> [--passes N] [--pattern zeros|random]
 securewipe wipe-dir <dir> [--passes N] [--pattern zeros|random] [--dry-run] [--yes]
 ```
@@ -17,6 +18,7 @@ securewipe wipe-dir <dir> [--passes N] [--pattern zeros|random] [--dry-run] [--y
 ```text
 securewipe inspect secret.txt
 securewipe inspect --detail secret.txt
+securewipe inspect --json secret.txt
 ```
 
 默认输出字段包括：
@@ -44,7 +46,14 @@ securewipe inspect --detail secret.txt
 - `preflight-blocker`：与某条候选动作绑定的阻塞原因，例如 USB bridge 或受限设备路径
 - `erase-advice`：为什么当前更适合这条路径的解释文本
 
-这组详细字段仍然是**探测与解释**，不是设备级命令执行结果。当前第一阶段也不会输出独立 JSON 计划文件，而是把结构化预执行信息附加在现有 `inspect --detail` 输出中。
+`inspect --json <path>` 会输出完整的只读 inspection report JSON 对象，而不是 `key: value` 文本。该对象会保留基础字段，并以 snake_case 嵌套：
+
+- `device_capabilities`
+- `erase_path_advice`
+
+其中 `device_capabilities.evidence_items` 与 `erase_path_advice.risk_flags` / `action_candidates` 会直接暴露结构化 preflight schema；如果同时传入 `--detail`，仍以完整 JSON 输出为准。
+
+这两类输出仍然都是**探测与解释**，不是设备级命令执行结果。当前 JSON 导出只是现有 inspection report 的机器可读序列化，不是独立 JSON 计划文件，也不代表 CLI 会自动进入下一步 destructive 动作。
 
 ## `wipe`
 
@@ -100,6 +109,7 @@ securewipe wipe-dir ./scratch --passes 1 --pattern random --yes
 ```text
 securewipe inspect ./sample.txt
 securewipe inspect --detail ./sample.txt
+securewipe inspect --json ./sample.txt
 securewipe wipe ./sample.txt --passes 1 --pattern zeros
 securewipe wipe-dir ./tmp --dry-run
 securewipe wipe-dir ./tmp --passes 1 --pattern random --yes
