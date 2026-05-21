@@ -47,6 +47,12 @@ python tools/validate_docs_code_links.py
 .venv\Scripts\python -m mkdocs build --strict
 ```
 
+### UML 图
+
+```powershell
+python tools/render_uml.py
+```
+
 ## 目录结构
 
 | 路径 | 说明 |
@@ -81,6 +87,7 @@ python tools/validate_docs_code_links.py
 | 架构或目录结构变化 | [docs/engineering/architecture.md][architecture-doc]、[README.md][readme-file] |
 | 公共 API 变化 | [docs/engineering/api.md][api-doc] |
 | 构建/测试命令变化 | [docs/engineering/development.md][development-doc]、[README.md][readme-file] |
+| 架构关系或关键执行流程变化 | [docs/engineering/uml.md][uml-doc]、[docs/engineering/architecture.md][architecture-doc] |
 
 ## 提交前建议检查
 
@@ -108,4 +115,5 @@ python tools/validate_docs_code_links.py
 [architecture-doc]: architecture.md
 [api-doc]: api.md
 [development-doc]: development.md
+[uml-doc]: uml.md
 [readme-file]: ../../README.md

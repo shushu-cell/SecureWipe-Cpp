@@ -1,0 +1,66 @@
+@startuml
+title SecureWipe-Cpp Core Class Diagram
+skinparam classAttributeIconSize 0
+
+namespace securewipe {
+  class WipeOptions
+  class InspectionReport
+  class WipeResult
+  class DeviceCapabilities
+  class ErasePathAdvice
+}
+
+namespace securewipe::app {
+  class CommandLineApplication {
+    +run(args)
+    -parse(args)
+    -run_inspect(request)
+    -run_wipe_file(request)
+    -run_wipe_directory(request)
+  }
+}
+
+namespace securewipe::detail {
+  interface OperationReporter
+  class StreamOperationReporter
+  class NullOperationReporter
+  abstract class DeviceCapabilityProbe
+  class SystemDeviceCapabilityProbe
+  class PathInspector
+  class DeviceCapabilityInspector
+  class ErasePathAdvisor
+  class NativeFile
+  class FileWiper
+  class DirectoryWiper
+  class SecureWipeFacade
+}
+
+securewipe::app::CommandLineApplication ..> securewipe::InspectionReport
+securewipe::app::CommandLineApplication ..> securewipe::WipeOptions
+securewipe::app::CommandLineApplication ..> securewipe::WipeResult
+
+securewipe::detail::StreamOperationReporter --|> securewipe::detail::OperationReporter
+securewipe::detail::NullOperationReporter --|> securewipe::detail::OperationReporter
+securewipe::detail::SystemDeviceCapabilityProbe --|> securewipe::detail::DeviceCapabilityProbe
+
+securewipe::detail::DeviceCapabilityInspector --> securewipe::detail::DeviceCapabilityProbe
+securewipe::detail::FileWiper --> securewipe::detail::PathInspector
+securewipe::detail::DirectoryWiper --> securewipe::detail::PathInspector
+securewipe::detail::DirectoryWiper --> securewipe::detail::FileWiper
+securewipe::detail::DirectoryWiper --> securewipe::detail::OperationReporter
+securewipe::detail::FileWiper --> securewipe::detail::NativeFile
+
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::PathInspector
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::SystemDeviceCapabilityProbe
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::DeviceCapabilityInspector
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::ErasePathAdvisor
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::FileWiper
+securewipe::detail::SecureWipeFacade *-- securewipe::detail::DirectoryWiper
+securewipe::detail::SecureWipeFacade ..> securewipe::InspectionReport
+securewipe::detail::SecureWipeFacade ..> securewipe::WipeOptions
+securewipe::detail::SecureWipeFacade ..> securewipe::WipeResult
+
+securewipe::detail::DeviceCapabilityInspector ..> securewipe::DeviceCapabilities
+securewipe::detail::ErasePathAdvisor ..> securewipe::ErasePathAdvice
+securewipe::detail::ErasePathAdvisor ..> securewipe::InspectionReport
+@enduml

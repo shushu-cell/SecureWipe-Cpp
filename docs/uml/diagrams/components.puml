@@ -1,0 +1,47 @@
+@startuml
+title SecureWipe-Cpp Component Diagram
+skinparam componentStyle rectangle
+
+package "Entry" {
+  [main.cpp] as Main
+  [CommandLineApplication] as CLI
+}
+
+package "Public API" {
+  [secure_wipe.h] as PublicHeader
+  [secure_wipe.cpp] as PublicFacade
+}
+
+package "Engine" {
+  [SecureWipeFacade] as Facade
+  [PathInspector] as PathInspector
+  [DeviceCapabilityInspector] as CapabilityInspector
+  [SystemDeviceCapabilityProbe] as CapabilityProbe
+  [ErasePathAdvisor] as Advisor
+  [FileWiper] as FileWiper
+  [DirectoryWiper] as DirectoryWiper
+  [NativeFile] as NativeFile
+  interface [OperationReporter] as Reporter
+}
+
+package "Quality" {
+  [Tests] as Tests
+  [Docs] as Docs
+}
+
+Main --> CLI
+CLI --> PublicHeader
+CLI --> PublicFacade
+PublicFacade --> Facade
+Facade --> PathInspector
+Facade --> CapabilityInspector
+CapabilityInspector --> CapabilityProbe
+Facade --> Advisor
+Facade --> FileWiper
+Facade --> DirectoryWiper
+DirectoryWiper --> FileWiper
+FileWiper --> NativeFile
+DirectoryWiper --> Reporter
+Tests --> PublicHeader
+Docs --> PublicFacade
+@enduml

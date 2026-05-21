@@ -58,6 +58,7 @@ nav:
   - 工程文档:
       - 需求分析: engineering/requirements.md
       - 系统架构: engineering/architecture.md
+      - UML 视图: engineering/uml.md
       - 公共 API: engineering/api.md
       - 开发指南: engineering/development.md
       - 文档维护: engineering/docs-maintenance.md

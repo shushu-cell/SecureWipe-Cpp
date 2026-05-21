@@ -1,0 +1,35 @@
+@startuml
+title SecureWipe-Cpp Use Cases
+left to right direction
+skinparam packageStyle rectangle
+
+actor "CLI User" as CliUser
+actor "Library Integrator" as Integrator
+actor Maintainer
+
+rectangle "SecureWipe-Cpp" {
+  usecase "Inspect path" as Inspect
+  usecase "Inspect path\nwith detail" as InspectDetail
+  usecase "Wipe file" as WipeFile
+  usecase "Preview directory wipe" as PreviewDirectoryWipe
+  usecase "Execute directory wipe" as ExecuteDirectoryWipe
+  usecase "Review safety guidance" as ReviewGuidance
+}
+
+CliUser --> Inspect
+CliUser --> InspectDetail
+CliUser --> WipeFile
+CliUser --> PreviewDirectoryWipe
+CliUser --> ExecuteDirectoryWipe
+
+Integrator --> Inspect
+Integrator --> WipeFile
+Integrator --> ExecuteDirectoryWipe
+
+Maintainer --> ReviewGuidance
+
+InspectDetail ..> Inspect : <<include>>
+WipeFile ..> ReviewGuidance : <<include>>
+PreviewDirectoryWipe ..> ReviewGuidance : <<include>>
+ExecuteDirectoryWipe ..> PreviewDirectoryWipe : <<include>>
+@enduml

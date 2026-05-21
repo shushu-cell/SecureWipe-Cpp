@@ -1,0 +1,23 @@
+@startuml
+title inspect --detail Sequence
+actor User
+participant "CommandLineApplication" as CLI
+participant "inspect_target(...)" as PublicAPI
+participant "SecureWipeFacade" as Facade
+participant "PathInspector" as Inspector
+participant "DeviceCapabilityInspector" as CapabilityInspector
+participant "ErasePathAdvisor" as Advisor
+
+User -> CLI : securewipe inspect --detail <path>
+CLI -> PublicAPI : inspect_target(path)
+PublicAPI -> Facade : inspect(path)
+Facade -> Inspector : inspect(path)
+Inspector --> Facade : InspectionReport
+Facade -> CapabilityInspector : inspect(DeviceInspectionContext)
+CapabilityInspector --> Facade : DeviceCapabilities
+Facade -> Advisor : advise(report)
+Advisor --> Facade : ErasePathAdvice
+Facade --> PublicAPI : InspectionReport + capabilities + advice
+PublicAPI --> CLI : InspectionReport
+CLI --> User : detailed report fields
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+title wipe-dir Activity
+start
+
+:Receive directory path and wipe options;
+:Inspect target path;
+
+if (Directory and not dangerous?) then (yes)
+  if (dry-run?) then (yes)
+    :Scan directory tree;
+    :Report planned file operations;
+    stop
+  else (no)
+    if (yes confirmed?) then (yes)
+      :Scan directory tree;
+      :For each regular file\ninvoke FileWiper;
+      :Aggregate wiped / failed counts;
+      :Remove empty directories\nbest effort;
+      stop
+    else (no)
+      :Refuse execution;
+      stop
+    endif
+  endif
+else (no)
+  :Return rejection result;
+  stop
+endif
+@enduml

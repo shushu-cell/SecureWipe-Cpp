@@ -10,3 +10,7 @@ site/
 .vscode/*
 !.vscode/settings.json
 .idea/
+
+# Python caches
+__pycache__/
+*.pyc

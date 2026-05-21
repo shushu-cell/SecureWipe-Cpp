@@ -78,7 +78,12 @@ click ApiFacade "../../src/secure_wipe.cpp" "src/secure_wipe.cpp"
 
 ## 图示规范
 
-当前项目优先使用 Mermaid 作为架构图和需求图的文本化表示方式，原因是：
+当前项目同时维护两类图示：
+
+- Mermaid：适合轻量架构图、流程图和背景图示，直接嵌在 Markdown 正文中。
+- PlantUML：适合需要明确遵守 UML 视角的用例图、组件图、类图、时序图和活动图。
+
+Mermaid 仍然保留，原因是：
 
 - 它与当前 MkDocs Material 工具链兼容，不需要额外维护二进制图片源文件。
 - 图和正文可以在同一 Markdown 页面中演进，便于 code review。
@@ -90,6 +95,8 @@ click ApiFacade "../../src/secure_wipe.cpp" "src/secure_wipe.cpp"
 2. 图示只表达当前代码已落地的结构和行为，不把规划内容画成“现状”。
 3. 架构或需求变化时，相关图示必须与正文一起更新。
 4. 修改图示后仍需通过 `mkdocs build --strict`。
+5. UML 图的事实来源是 [docs/uml/diagrams/](../uml/diagrams/) 下的 `.puml` 文件；展示产物是 [docs/uml/rendered/](../uml/rendered/) 下的 `.svg`。
+6. 修改 UML 源文件后，必须运行 [tools/render_uml.py](../../tools/render_uml.py)，并同步检查 [UML 视图](uml.md) 与 [系统架构](architecture.md) 是否仍然一致。
 
 ## CI 约束
 
@@ -106,6 +113,7 @@ click ApiFacade "../../src/secure_wipe.cpp" "src/secure_wipe.cpp"
 - 仓库路径与代码引用是否都已写成可跳转链接
 - 架构图和目录说明是否与当前仓库一致
 - Mermaid 图是否仍能表达当前边界与主干流程
+- PlantUML 源文件、渲染结果和 UML 文档页是否已同步更新
 - README 是否仍是“入口页”而不是“第二份完整文档”
 
 [docs-dir]: ../index.md
