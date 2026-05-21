@@ -319,3 +319,30 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `cmake --build build`
 - `ctest --test-dir build -C Debug --output-on-failure`
 - 结果：配置通过、完整编译通过、7 个测试全部通过。
+
+## 2026-05-21 设备能力探测链路三轮迭代重构
+
+### 范围与约束
+
+- 目标粒度：模块 / 文件 / 函数级，重点针对新增的设备能力探测与擦除路径解释链路。
+- 期望结果：减少重复策略判断、收紧策略选择边界、让平台探测主流程更容易扩展，同时保持行为不变。
+- 非协商约束：
+	- 保持 `include/secure_wipe.h` 公共 API 不变
+	- 不改变 CLI 对外契约
+	- 继续遵守当前 C++20 / CMake / CTest 工程基线
+	- 每一轮都要在改动后立即通过编译和测试验证
+
+### 第 1 轮：能力分类策略去重
+
+- 识别到的坏味道：`device_capability_inspector.cpp` 中 `device_sanitize_review` 与 `crypto_erase_review` 的分类逻辑重复编码了同一套“network / USB bridge / virtual bus 保守处理”规则，后续新增总线类型时容易出现一边修改、另一边遗漏。
+- 采取的重构：
+	- 引入 `ReviewKind`
+	- 将共享守卫收敛到 `classify_restricted_review_state(...)`
+	- 将总线分支收敛到 `classify_review_for_bus(...)`
+	- 由统一的 `classify_review_state(...)` 负责生成两种 review 结论
+	- 增加测试覆盖 `rotational + unknown bus` 的保守结论
+- 刻意不改动的部分：
+	- 未改动任何公共枚举值或字段命名
+	- 未把当前显式 `switch` 进一步压成表驱动结构，因为当前分支数量有限，显式分支仍更容易审查
+	- 未改变现有证据文本
+- 验证：`cmake --build build`、`ctest --test-dir build -C Debug --output-on-failure` 通过

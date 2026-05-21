@@ -319,6 +319,19 @@ void test_dangerous_root_is_refused() {
             require(!capabilities.evidence.empty(), "DeviceCapabilityInspector should propagate evidence lines");
         }
 
+        void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative() {
+            FakeDeviceCapabilityProbe probe;
+            probe.snapshot.bus_kind = securewipe::DeviceBusKind::Unknown;
+
+            securewipe::detail::DeviceCapabilityInspector inspector(probe);
+            const auto capabilities = inspector.inspect("ignored", securewipe::StorageKind::RotationalDisk);
+
+            require(capabilities.device_sanitize_review == securewipe::CapabilityState::Unknown,
+                    "Unknown bus on rotational storage should keep device sanitize review conservative");
+            require(capabilities.crypto_erase_review == securewipe::CapabilityState::Unsupported,
+                    "Unknown bus on rotational storage should not over-promise crypto-erase review support");
+        }
+
         void test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets() {
             securewipe::InspectionReport report;
             report.ok = true;
@@ -366,6 +379,7 @@ int main() {
         test_wipe_directory_executes_when_confirmed();
         test_dangerous_root_is_refused();
         test_device_capability_inspector_maps_probe_snapshot();
+        test_device_capability_inspector_keeps_rotational_unknown_bus_conservative();
         test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets();
         test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths();
         std::cout << "All tests passed.\n";

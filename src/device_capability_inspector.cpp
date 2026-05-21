@@ -26,69 +26,74 @@ namespace securewipe::detail {
 
 namespace {
 
+enum class ReviewKind {
+    DeviceSanitize,
+    CryptoErase,
+};
+
 void append_evidence(std::vector<std::string>& evidence, std::string_view line) {
     evidence.emplace_back(line);
 }
 
-CapabilityState classify_device_sanitize_review(const DeviceProbeSnapshot& snapshot, StorageKind storage_kind) {
+CapabilityState classify_restricted_review_state(const DeviceProbeSnapshot& snapshot, StorageKind storage_kind) {
     if (storage_kind == StorageKind::NetworkShare || snapshot.bus_kind == DeviceBusKind::Network) {
         return CapabilityState::Restricted;
     }
 
     if (snapshot.usb_bridge_suspected) {
         return CapabilityState::Restricted;
-    }
-
-    switch (snapshot.bus_kind) {
-    case DeviceBusKind::Nvme:
-    case DeviceBusKind::Ata:
-    case DeviceBusKind::Sata:
-    case DeviceBusKind::Scsi:
-        return CapabilityState::Supported;
-    case DeviceBusKind::Usb:
-    case DeviceBusKind::Virtual:
-        return CapabilityState::Restricted;
-    case DeviceBusKind::Network:
-        return CapabilityState::Restricted;
-    case DeviceBusKind::Unknown:
-        return CapabilityState::Unknown;
     }
 
     return CapabilityState::Unknown;
 }
 
-CapabilityState classify_crypto_erase_review(const DeviceProbeSnapshot& snapshot, StorageKind storage_kind) {
-    if (storage_kind == StorageKind::NetworkShare || snapshot.bus_kind == DeviceBusKind::Network) {
+CapabilityState classify_review_for_bus(ReviewKind review_kind, DeviceBusKind bus_kind, StorageKind storage_kind) {
+    if (bus_kind == DeviceBusKind::Usb || bus_kind == DeviceBusKind::Virtual || bus_kind == DeviceBusKind::Network) {
         return CapabilityState::Restricted;
     }
 
-    if (snapshot.usb_bridge_suspected) {
-        return CapabilityState::Restricted;
-    }
-
-    switch (snapshot.bus_kind) {
+    switch (bus_kind) {
     case DeviceBusKind::Nvme:
     case DeviceBusKind::Ata:
     case DeviceBusKind::Sata:
+        if (review_kind == ReviewKind::DeviceSanitize) {
+            return CapabilityState::Supported;
+        }
+
         return storage_kind == StorageKind::RotationalDisk
             ? CapabilityState::Unsupported
             : CapabilityState::Supported;
     case DeviceBusKind::Scsi:
+        if (review_kind == ReviewKind::DeviceSanitize) {
+            return CapabilityState::Supported;
+        }
+
         return storage_kind == StorageKind::SolidState
             ? CapabilityState::Supported
             : CapabilityState::Unknown;
-    case DeviceBusKind::Usb:
-    case DeviceBusKind::Virtual:
-        return CapabilityState::Restricted;
-    case DeviceBusKind::Network:
-        return CapabilityState::Restricted;
     case DeviceBusKind::Unknown:
-        return storage_kind == StorageKind::RotationalDisk
+        return review_kind == ReviewKind::CryptoErase && storage_kind == StorageKind::RotationalDisk
             ? CapabilityState::Unsupported
             : CapabilityState::Unknown;
+    case DeviceBusKind::Usb:
+    case DeviceBusKind::Virtual:
+    case DeviceBusKind::Network:
+        return CapabilityState::Restricted;
     }
 
     return CapabilityState::Unknown;
+}
+
+CapabilityState classify_review_state(
+    ReviewKind review_kind,
+    const DeviceProbeSnapshot& snapshot,
+    StorageKind storage_kind) {
+    const CapabilityState restricted_state = classify_restricted_review_state(snapshot, storage_kind);
+    if (restricted_state == CapabilityState::Restricted) {
+        return restricted_state;
+    }
+
+    return classify_review_for_bus(review_kind, snapshot.bus_kind, storage_kind);
 }
 
 #if defined(_WIN32)
@@ -352,8 +357,8 @@ DeviceCapabilities DeviceCapabilityInspector::inspect(const fs::path& path, Stor
     DeviceCapabilities capabilities;
     capabilities.bus_kind = snapshot.bus_kind;
     capabilities.trim_support = snapshot.trim_support;
-    capabilities.device_sanitize_review = classify_device_sanitize_review(snapshot, storage_kind);
-    capabilities.crypto_erase_review = classify_crypto_erase_review(snapshot, storage_kind);
+    capabilities.device_sanitize_review = classify_review_state(ReviewKind::DeviceSanitize, snapshot, storage_kind);
+    capabilities.crypto_erase_review = classify_review_state(ReviewKind::CryptoErase, snapshot, storage_kind);
     capabilities.is_removable_media = snapshot.is_removable_media;
     capabilities.usb_bridge_suspected = snapshot.usb_bridge_suspected;
     capabilities.evidence = snapshot.evidence;
