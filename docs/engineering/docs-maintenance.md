@@ -48,6 +48,7 @@ python tools/validate_docs_code_links.py
 仓库内源码、头文件、测试、文档源文件和关键配置文件在正文、表格、列表中出现时，必须写成可跳转链接，而不是单独的反引号文本。
 
 - 正文、表格、列表中的仓库路径引用统一使用 Markdown 链接，目标指向对应 GitHub 源文件或目录。
+- 在 [docs/engineering/api.md][api-doc] 中，公共类型、顶层函数以及关键配置字段至少应链接到对应章节或 [include/secure_wipe.h][secure-wipe-header] 中的定义。
 - Mermaid 图中的代码路径节点必须补 `click` 指令，让图中的代码引用也能直接跳转。
 - 纯命令示例或代码块中的路径可按命令原样保留，但解释性内容里的仓库引用仍必须链接化。
 - 提交前必须运行 [tools/validate_docs_code_links.py][docs-link-validator]；CI 也会执行同一校验。
@@ -110,4 +111,6 @@ click ApiFacade "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/sec
 [docs-requirements]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/requirements.txt
 [docs-javascripts-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs/javascripts
 [docs-link-validator]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/tools/validate_docs_code_links.py
+[api-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/engineering/api.md
 [readme-file]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/README.md
+[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h

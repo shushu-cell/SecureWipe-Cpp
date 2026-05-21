@@ -10,6 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = ROOT / "docs"
+API_DOC_FILE = DOCS_DIR / "engineering" / "api.md"
 
 TEXT_REFERENCE_RE = re.compile(
     r"(?<![\w/])("
@@ -24,6 +25,27 @@ URL_RE = re.compile(r"https?://\S+")
 FENCE_RE = re.compile(r"^\s*(```|~~~)\s*([^\s`]*)")
 MERMAID_NODE_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_]*)\[(.+)\]\s*$")
 MERMAID_CLICK_RE = re.compile(r'^\s*click\s+([A-Za-z][A-Za-z0-9_]*)\s+"[^"]+"')
+INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+API_SYMBOLS_REQUIRING_LINKS = {
+    "Pattern",
+    "WipeOptions",
+    "TargetKind",
+    "StorageKind",
+    "StrategyRecommendation",
+    "DeviceBusKind",
+    "CapabilityState",
+    "EraseMethod",
+    "DeviceCapabilities",
+    "ErasePathAdvice",
+    "InspectionReport",
+    "WipeResult",
+    "inspect_target(...)",
+    "wipe_file(...)",
+    "wipe_directory(...)",
+    "passes",
+    "pattern",
+    "block_size",
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +77,19 @@ def scan_text_line(file_path: Path, line_number: int, line: str) -> list[Violati
                 message=f"repository reference '{match.group(1)}' must use a Markdown link",
             )
         )
+
+    if file_path == API_DOC_FILE:
+        for match in INLINE_CODE_RE.finditer(masked):
+            symbol = match.group(1)
+            if symbol not in API_SYMBOLS_REQUIRING_LINKS:
+                continue
+            violations.append(
+                Violation(
+                    file_path=file_path,
+                    line_number=line_number,
+                    message=f"public API symbol '{symbol}' must use a Markdown link",
+                )
+            )
     return violations
 
 
