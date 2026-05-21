@@ -88,6 +88,20 @@ void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative(
             "Unknown bus on rotational storage should not over-promise crypto-erase review support");
 }
 
+void test_device_capability_inspector_supports_scsi_crypto_erase_review_for_ssd() {
+    FakeDeviceCapabilityProbe probe;
+    probe.snapshot.bus_kind = securewipe::DeviceBusKind::Scsi;
+
+    securewipe::detail::DeviceCapabilityInspector inspector(probe);
+    const auto context = make_inspection_context(securewipe::StorageKind::SolidState);
+    const auto capabilities = inspector.inspect(context);
+
+    require(capabilities.device_sanitize_review == securewipe::CapabilityState::Supported,
+            "SCSI SSD targets should keep device sanitize review available");
+    require(capabilities.crypto_erase_review == securewipe::CapabilityState::Supported,
+            "SCSI SSD targets should advertise crypto-erase review when the policy allows it");
+}
+
 void test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets() {
         securewipe::InspectionReport report = make_review_before_wipe_report(
                 securewipe::StorageKind::SolidState,
@@ -113,6 +127,20 @@ void test_erase_path_advisor_falls_back_to_crypto_erase_review() {
             "ErasePathAdvisor should fall back to crypto-erase review when device sanitize review is unavailable");
     require(!advice.reasons.empty() && contains(advice.reasons.front(), "crypto-erase"),
             "ErasePathAdvisor should explain why crypto-erase review was chosen");
+}
+
+void test_erase_path_advisor_falls_back_to_manual_review_without_supported_reviews() {
+        securewipe::InspectionReport report = make_review_before_wipe_report(
+                securewipe::StorageKind::SolidState,
+                securewipe::DeviceBusKind::Unknown);
+        report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Unknown;
+        report.device_capabilities.crypto_erase_review = securewipe::CapabilityState::Unknown;
+
+        const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
+        require(advice.preferred_method == securewipe::EraseMethod::ManualReview,
+                        "ErasePathAdvisor should fall back to manual review when no supported review path is available");
+        require(!advice.reasons.empty() && contains(advice.reasons.front(), "additional review"),
+                        "ErasePathAdvisor should explain the manual review fallback");
 }
 
 void test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths() {
@@ -143,8 +171,10 @@ void run_capability_inspection_tests() {
     test_cli_inspect_detail_reports_capability_fields();
     test_device_capability_inspector_maps_probe_snapshot();
     test_device_capability_inspector_keeps_rotational_unknown_bus_conservative();
+        test_device_capability_inspector_supports_scsi_crypto_erase_review_for_ssd();
     test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets();
     test_erase_path_advisor_falls_back_to_crypto_erase_review();
+        test_erase_path_advisor_falls_back_to_manual_review_without_supported_reviews();
     test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths();
         test_erase_path_advisor_reports_unknown_when_no_recommendation_exists();
 }

@@ -469,3 +469,37 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- 未把这些 helper 合并到通用 `test_support.h`，因为它们显式依赖能力探测内部类型，仍属于特性专属支撑层
 	- 未把能力测试拆成多个源文件，当前测试规模仍然适合保留在单个专用翻译单元里
 	- 未引入第三方测试框架或更重的 fixture 体系，保持现有轻量测试风格
+
+## 2026-05-21 能力策略矩阵声明式重构
+
+### 识别到的坏味道
+
+- `device_capability_inspector.cpp` 中的 `classify_review_for_bus(...)` / `classify_review_state(...)` 虽然属于真实业务规则，但其中真正稳定的其实是 `ReviewKind × DeviceBusKind × StorageKind -> CapabilityState` 策略矩阵；继续用 `switch/case + if/else` 编码，会让受限总线规则、存储介质特例和 review 类型差异分散在多个分支里，后续新增总线或保守规则时容易漏改。
+- `erase_path_advisor.cpp` 中的 `select_review_before_wipe_method(...)` 通过顺序 `if` 链表达 review 优先级，主决策顺序只能靠阅读控制流理解，扩展新的 review 路径时容易继续堆条件分支。
+- 反过来，大量 `if/else` 或 `switch/case` 并不自动等于 bad smell。本轮复查后确认：`path_inspector.cpp`、`file_wiper.cpp`、`directory_wiper.cpp`、`secure_wipe_engine.cpp`、`native_file.cpp`、`main.cpp` 的控制流主要承担 I/O、副作用或薄适配职责，显式命令式写法仍然更清晰。
+
+### 采取的重构
+
+- 在 `src/device_capability_inspector.cpp` 中新增 `ReviewPolicy` 与 `kReviewPolicies`，把 review 能力判定的稳定矩阵集中为只读规则表。
+- 新增 `is_restricted_bus(...)` 与 `find_review_policy(...)`，把“受限总线提前拒绝”和“普通总线按策略表查找”分开表达，去掉了 `Usb / Virtual / Network` 在多处分支里的重复出现。
+- `classify_review_for_bus(...)` 改为先做受限总线 guard，再走规则表 + `StorageKind` override，从实现上保留现有保守行为，但把策略结构显式化。
+- 在 `src/erase_path_advisor.cpp` 中新增 `ReviewSelectionRule` 与 `kReviewSelectionRules`，把 `device_sanitize_review` 优先于 `crypto_erase_review` 的顺序写成显式优先级表。
+- `select_review_before_wipe_method(...)` 改为在优先级表中查找第一个 `CapabilityState::Supported` 的路径；没有命中时才回退到 `ManualReview`。
+- 在 `tests/capability_inspection_tests.cpp` 中新增回归测试：
+	- `test_device_capability_inspector_supports_scsi_crypto_erase_review_for_ssd()`
+	- `test_erase_path_advisor_falls_back_to_manual_review_without_supported_reviews()`
+
+### 审计后刻意不改动的文件
+
+- `src/path_inspector.cpp`：`filesystem_hint_for_path(...)`、`detect_storage_kind(...)`、`is_dangerous_directory(...)` 的控制流主要是平台适配和安全 guard，不存在新的稳定策略矩阵被埋进命令式代码的问题。
+- `src/cli_application.cpp`：枚举标签和命令选择已经是 `constexpr` 表驱动 + `std::ranges` 风格，这一轮没有新的同类坏味道。
+- `src/file_wiper.cpp` 与 `src/directory_wiper.cpp`：核心是覆盖写入、目录遍历、失败短路和 dry-run/yes 安全分支，继续保持显式流程更利于审计。
+- `src/secure_wipe_engine.cpp`、`src/native_file.cpp`、`src/main.cpp`：分别是薄编排层、底层 I/O 包装和启动胶水层，没有新的重构收益点。
+- `src/device_capability_inspector.cpp` 的 Windows / Linux probe 细节本轮没有进一步拆到独立翻译单元，因为当前 `SystemDeviceCapabilityProbe::probe(...)` 已经是很薄的共享守卫 + 平台 helper 分发；继续拆分的收益低于引入的新文件成本。
+
+### 验证
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- 结果：聚焦能力测试与全量测试均通过，行为保持稳定。

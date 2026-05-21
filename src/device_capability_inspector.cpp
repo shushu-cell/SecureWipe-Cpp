@@ -8,6 +8,7 @@
 #include <cctype>
 #include <fstream>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string_view>
 #include <system_error>
@@ -31,8 +32,96 @@ enum class ReviewKind {
     CryptoErase,
 };
 
+struct ReviewPolicy {
+    ReviewKind review_kind;
+    DeviceBusKind bus_kind;
+    CapabilityState default_state;
+    std::optional<StorageKind> override_storage_kind;
+    CapabilityState override_state;
+};
+
+constexpr std::array kReviewPolicies{
+    ReviewPolicy{
+        ReviewKind::DeviceSanitize,
+        DeviceBusKind::Nvme,
+        CapabilityState::Supported,
+        std::nullopt,
+        CapabilityState::Supported,
+    },
+    ReviewPolicy{
+        ReviewKind::DeviceSanitize,
+        DeviceBusKind::Ata,
+        CapabilityState::Supported,
+        std::nullopt,
+        CapabilityState::Supported,
+    },
+    ReviewPolicy{
+        ReviewKind::DeviceSanitize,
+        DeviceBusKind::Sata,
+        CapabilityState::Supported,
+        std::nullopt,
+        CapabilityState::Supported,
+    },
+    ReviewPolicy{
+        ReviewKind::DeviceSanitize,
+        DeviceBusKind::Scsi,
+        CapabilityState::Supported,
+        std::nullopt,
+        CapabilityState::Supported,
+    },
+    ReviewPolicy{
+        ReviewKind::CryptoErase,
+        DeviceBusKind::Nvme,
+        CapabilityState::Supported,
+        StorageKind::RotationalDisk,
+        CapabilityState::Unsupported,
+    },
+    ReviewPolicy{
+        ReviewKind::CryptoErase,
+        DeviceBusKind::Ata,
+        CapabilityState::Supported,
+        StorageKind::RotationalDisk,
+        CapabilityState::Unsupported,
+    },
+    ReviewPolicy{
+        ReviewKind::CryptoErase,
+        DeviceBusKind::Sata,
+        CapabilityState::Supported,
+        StorageKind::RotationalDisk,
+        CapabilityState::Unsupported,
+    },
+    ReviewPolicy{
+        ReviewKind::CryptoErase,
+        DeviceBusKind::Scsi,
+        CapabilityState::Unknown,
+        StorageKind::SolidState,
+        CapabilityState::Supported,
+    },
+    ReviewPolicy{
+        ReviewKind::CryptoErase,
+        DeviceBusKind::Unknown,
+        CapabilityState::Unknown,
+        StorageKind::RotationalDisk,
+        CapabilityState::Unsupported,
+    },
+};
+
 void append_evidence(std::vector<std::string>& evidence, std::string_view line) {
     evidence.emplace_back(line);
+}
+
+constexpr bool is_restricted_bus(DeviceBusKind bus_kind) noexcept {
+    return bus_kind == DeviceBusKind::Usb
+        || bus_kind == DeviceBusKind::Virtual
+        || bus_kind == DeviceBusKind::Network;
+}
+
+const ReviewPolicy* find_review_policy(ReviewKind review_kind, DeviceBusKind bus_kind) {
+    const auto policy = std::ranges::find_if(kReviewPolicies, [review_kind, bus_kind](const ReviewPolicy& candidate) {
+        return candidate.review_kind == review_kind && candidate.bus_kind == bus_kind;
+    });
+
+    return policy != kReviewPolicies.end() ? &*policy : nullptr;
 }
 
 CapabilityState classify_restricted_review_state(const DeviceProbeSnapshot& snapshot, StorageKind storage_kind) {
@@ -48,37 +137,16 @@ CapabilityState classify_restricted_review_state(const DeviceProbeSnapshot& snap
 }
 
 CapabilityState classify_review_for_bus(ReviewKind review_kind, DeviceBusKind bus_kind, StorageKind storage_kind) {
-    if (bus_kind == DeviceBusKind::Usb || bus_kind == DeviceBusKind::Virtual || bus_kind == DeviceBusKind::Network) {
+    if (is_restricted_bus(bus_kind)) {
         return CapabilityState::Restricted;
     }
 
-    switch (bus_kind) {
-    case DeviceBusKind::Nvme:
-    case DeviceBusKind::Ata:
-    case DeviceBusKind::Sata:
-        if (review_kind == ReviewKind::DeviceSanitize) {
-            return CapabilityState::Supported;
+    if (const ReviewPolicy* policy = find_review_policy(review_kind, bus_kind); policy != nullptr) {
+        if (policy->override_storage_kind == storage_kind) {
+            return policy->override_state;
         }
 
-        return storage_kind == StorageKind::RotationalDisk
-            ? CapabilityState::Unsupported
-            : CapabilityState::Supported;
-    case DeviceBusKind::Scsi:
-        if (review_kind == ReviewKind::DeviceSanitize) {
-            return CapabilityState::Supported;
-        }
-
-        return storage_kind == StorageKind::SolidState
-            ? CapabilityState::Supported
-            : CapabilityState::Unknown;
-    case DeviceBusKind::Unknown:
-        return review_kind == ReviewKind::CryptoErase && storage_kind == StorageKind::RotationalDisk
-            ? CapabilityState::Unsupported
-            : CapabilityState::Unknown;
-    case DeviceBusKind::Usb:
-    case DeviceBusKind::Virtual:
-    case DeviceBusKind::Network:
-        return CapabilityState::Restricted;
+        return policy->default_state;
     }
 
     return CapabilityState::Unknown;

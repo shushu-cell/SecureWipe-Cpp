@@ -18,6 +18,12 @@ struct ReviewSelection {
     std::string_view primary_reason;
 };
 
+struct ReviewSelectionRule {
+    CapabilityState DeviceCapabilities::*review_state;
+    EraseMethod preferred_method;
+    std::string_view primary_reason;
+};
+
 constexpr std::array kDirectAdviceMappings{
     DirectAdviceMapping{
         StrategyRecommendation::Refuse,
@@ -41,6 +47,19 @@ constexpr std::array kDirectAdviceMappings{
     },
 };
 
+constexpr std::array kReviewSelectionRules{
+    ReviewSelectionRule{
+        &DeviceCapabilities::device_sanitize_review,
+        EraseMethod::DeviceSanitizeReview,
+        "Current target appears to live on storage where device-level sanitization should be reviewed before relying on file-level overwrite.",
+    },
+    ReviewSelectionRule{
+        &DeviceCapabilities::crypto_erase_review,
+        EraseMethod::CryptoEraseReview,
+        "Current target appears to live on storage where crypto-erase should be reviewed before relying on file-level overwrite.",
+    },
+};
+
 void add_reason(std::vector<std::string>& reasons, std::string_view reason) {
     reasons.emplace_back(reason);
 }
@@ -61,17 +80,14 @@ void append_direct_recommendation_advice(ErasePathAdvice& advice, StrategyRecomm
 }
 
 ReviewSelection select_review_before_wipe_method(const DeviceCapabilities& capabilities) {
-    if (capabilities.device_sanitize_review == CapabilityState::Supported) {
-        return {
-            EraseMethod::DeviceSanitizeReview,
-            "Current target appears to live on storage where device-level sanitization should be reviewed before relying on file-level overwrite.",
-        };
-    }
+    const auto rule = std::ranges::find_if(kReviewSelectionRules, [&capabilities](const ReviewSelectionRule& candidate) {
+        return capabilities.*(candidate.review_state) == CapabilityState::Supported;
+    });
 
-    if (capabilities.crypto_erase_review == CapabilityState::Supported) {
+    if (rule != kReviewSelectionRules.end()) {
         return {
-            EraseMethod::CryptoEraseReview,
-            "Current target appears to live on storage where crypto-erase should be reviewed before relying on file-level overwrite.",
+            rule->preferred_method,
+            rule->primary_reason,
         };
     }
 
