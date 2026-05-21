@@ -348,6 +348,23 @@ void test_dangerous_root_is_refused() {
                 "ErasePathAdvisor should explain why device sanitize review was chosen");
         }
 
+            void test_erase_path_advisor_falls_back_to_crypto_erase_review() {
+                securewipe::InspectionReport report;
+                report.ok = true;
+                report.target_kind = securewipe::TargetKind::RegularFile;
+                report.storage_kind = securewipe::StorageKind::SolidState;
+                report.recommendation = securewipe::StrategyRecommendation::ReviewBeforeWipe;
+                report.device_capabilities.bus_kind = securewipe::DeviceBusKind::Scsi;
+                report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Unknown;
+                report.device_capabilities.crypto_erase_review = securewipe::CapabilityState::Supported;
+
+                const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
+                require(advice.preferred_method == securewipe::EraseMethod::CryptoEraseReview,
+                    "ErasePathAdvisor should fall back to crypto-erase review when device sanitize review is unavailable");
+                require(!advice.reasons.empty() && contains(advice.reasons.front(), "crypto-erase"),
+                    "ErasePathAdvisor should explain why crypto-erase review was chosen");
+            }
+
         void test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths() {
             securewipe::InspectionReport report;
             report.ok = true;
@@ -381,6 +398,7 @@ int main() {
         test_device_capability_inspector_maps_probe_snapshot();
         test_device_capability_inspector_keeps_rotational_unknown_bus_conservative();
         test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets();
+        test_erase_path_advisor_falls_back_to_crypto_erase_review();
         test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths();
         std::cout << "All tests passed.\n";
         return 0;

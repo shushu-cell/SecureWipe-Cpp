@@ -346,3 +346,17 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- 未把当前显式 `switch` 进一步压成表驱动结构，因为当前分支数量有限，显式分支仍更容易审查
 	- 未改变现有证据文本
 - 验证：`cmake --build build`、`ctest --test-dir build -C Debug --output-on-failure` 通过
+
+### 第 2 轮：`ErasePathAdvisor` 决策与解释解耦
+
+- 识别到的坏味道：`ErasePathAdvisor::advise(...)` 的 `ReviewBeforeWipe` 分支同时承担“选择首选 review 路径”和“追加解释文案”，策略优先级与附加理由混在一起，扩展时容易把主决策和附加原因搅在同一处。
+- 采取的重构：
+	- 引入 `ReviewSelection`
+	- 抽出 `select_review_before_wipe_method(...)` 负责选择主路径
+	- 抽出 `append_review_before_wipe_reasons(...)` 负责追加解释文本与限制性说明
+	- 增加测试覆盖“device sanitize 不可用时回退到 crypto-erase review”
+- 刻意不改动的部分：
+	- 未改变现有优先级：`DeviceSanitizeReview` 仍优先于 `CryptoEraseReview`
+	- 未调整现有解释文本的对外语义，只是重组生成位置
+	- 未把所有 recommendation 都抽成独立策略对象，当前 `switch` 仍是最清晰的入口
+- 验证：`cmake --build build`、`ctest --test-dir build -C Debug --output-on-failure` 通过
