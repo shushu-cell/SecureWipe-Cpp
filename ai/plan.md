@@ -671,3 +671,114 @@
 3. 默认优先人工可读的 `--detail` 输出，JSON 导出放在同一阶段的后半步或下一小步，而不是一开始就把 CLI 重心转成数据导出。
 4. 把 `UnderlyingDevice` scope、`blockers`、`confidence` 做成 schema 的硬字段，而不是继续依赖解释性文案。
 5. 在这一层稳定之前，不批准真实 ATA / NVMe destructive command 执行进入主线实现。
+
+## 2026-05-21 结构化证据与预执行计划三轮设计审查修订
+
+### 第 1 轮：公共契约与改动面审查
+
+#### 发现的问题
+
+- 上一版方案的目标方向是对的，但 public schema 初稿略偏“大而全”：同时提出 `InspectPreflightPlan`、`CapabilityEvidenceItem`、`ActionCandidate`、多组新枚举和可选 JSON 路线，容易在第一版就把 `include/secure_wipe.h`、CLI、docs 和 tests 的改动面同时放大。
+- 若在第一版就引入“新的顶层 preflight 服务对象 + 新的顶层聚合类型 + JSON 导出预埋”，实现成本会明显高于当前系统真实需要。
+- 当前系统已经有稳定的 `DeviceCapabilities` 与 `ErasePathAdvice` 两个公共聚合对象；若无必要再新增并行顶层结构，调用方理解成本会上升。
+
+#### 审查结论
+
+- 第一版实现必须坚持**加法式演进**，优先复用现有聚合对象，而不是新增过多并行概念。
+- `结构化证据` 与 `预执行计划` 要落地，但应尽量挂载到现有 `DeviceCapabilities` / `ErasePathAdvice` 之下，避免让 `InspectionReport` 在单次迭代里膨胀出过多新层级。
+- 当前实现不应把 JSON 导出列为同一阶段的硬交付；它是自然扩展点，但不是第一批必须实现的核心价值。
+
+#### 修改后的设计决策
+
+- 保留现有：
+  - `DeviceCapabilities::evidence`
+  - `ErasePathAdvice::reasons`
+- 新增但收敛到现有聚合对象内部：
+  - `CapabilityEvidenceItem` 列表，挂在 `DeviceCapabilities` 下
+  - `PreflightRisk` 列表，挂在 `ErasePathAdvice` 下
+  - `ActionCandidate` 列表，挂在 `ErasePathAdvice` 下
+- 不在第一版新增独立的 `InspectPreflightPlan` 顶层公共类型。
+- JSON 导出从“当前实现范围”降级为“后续自然扩展点”。
+
+### 第 2 轮：语义可信度与单一事实源审查
+
+#### 发现的问题
+
+- 如果结构化字段和当前 `evidence` / `reasons` 自由文本各自独立维护，后续极易出现一边更新、一边遗漏的双重事实源。
+- 当前 docs 反复强调“推断不等于确认”，但上一版方案里对 `Supported`、`Observed`、`Inferred`、`Blocked` 的语义边界还不够紧，第一版若枚举过细，反而更容易让调用方误解它们是设备厂商级确认。
+- `risk_flags` 与 `action_candidates.blockers` 若来源不清，CLI 容易把它们打印成漂亮的文案，却没有真正可复核的证据链。
+
+#### 审查结论
+
+- 第一版必须建立**单一事实源**：结构化模型是主数据，自由文本是派生视图，而不是反过来。
+- 结构化 schema 需要围绕当前系统已经能可靠产生的语义来设计，而不是预支未来阶段才有的精度。
+- `Observed / Inferred / ConservativeFallback` 这类可信度级别是有价值的，但第一版不要扩成更复杂的证据等级体系。
+
+#### 修改后的设计决策
+
+- 结构化 evidence 字段采用最小可用集合：
+  - `EvidenceSubject`
+  - `EvidenceSource`
+  - `EvidenceConfidence`
+  - `summary`
+- 不在第一版加入额外的任意 `details` map / JSON payload / 未约束字典字段。
+- 通过内部 helper 统一追加结构化 evidence，并同步派生现有 `DeviceCapabilities::evidence` 文本。
+- 通过内部 helper 统一追加 action candidate / risk flag，并同步派生现有 `ErasePathAdvice::reasons` 文本中真正需要对人展示的主理由。
+- `Supported` 在当前阶段继续只表示“足以进入 review 的支持线索”，不会在任何新增字段里被解释为 destructive command 已确认可执行。
+
+### 第 3 轮：作用域、安全边界与可交付性审查
+
+#### 发现的问题
+
+- 当前 inspect 的输入是一个 `path`，但 `DeviceSanitizeReview` / `CryptoEraseReview` 指向的往往是 `UnderlyingDevice` 级动作。如果 schema 不显式编码 `scope`，用户会自然把“建议 review 整设备路径”误读成“可以直接对当前 path 执行设备级命令”。
+- `USB bridge`、`network share`、`virtualized storage`、`platform probe gap` 这些限制信号如果只存在于 warning 文案里，后续很难复用到真实设备级执行阶段做硬性闸门。
+- 若第一版同时做 schema、CLI 重排、JSON 导出和 docs 大改，验证成本会过高，不适合当前要求的“小步、谨慎、可频繁 push”节奏。
+
+#### 审查结论
+
+- 第一版的最小可交付版本必须显式区分 `CurrentPath` 与 `UnderlyingDevice` 作用域。
+- 风险信号必须进入结构化字段，而不能继续只存在于自然语言 warning 里。
+- 当前交付只覆盖：公共类型加法扩展、内部生成链路、`inspect --detail` 分组输出、测试与 docs 同步；不包括 JSON，不包括新的 destructive 子命令，不包括设备标识扩张。
+
+#### 修改后的设计决策
+
+- 新增最小枚举集合：
+  - `EvidenceSubject`
+  - `EvidenceSource`
+  - `EvidenceConfidence`
+  - `PreflightRisk`
+  - `ActionCandidateState`
+  - `ActionTargetScope`
+- 新增最小结构集合：
+  - `CapabilityEvidenceItem`
+  - `ActionCandidate`
+- `ActionCandidate` 必带：
+  - `method`
+  - `state`
+  - `target_scope`
+  - `summary`
+  - `blockers`
+- `inspect --detail` 文本输出升级为三组：
+  - capability evidence
+  - preflight risk
+  - action candidate
+- 默认 `inspect` 输出保持稳定；不新增 `inspect --json`；不新增新的执行命令；不输出完整 model / serial / raw device path。
+
+### 三轮审查后的批准实现版本
+
+本任务进入实现阶段时，批准的范围收敛为：
+
+1. 在 `include/secure_wipe.h` 中以加法方式新增最小结构化 schema：`CapabilityEvidenceItem`、`ActionCandidate` 及相关最小枚举。
+2. 在 `DeviceCapabilities` 下新增结构化 evidence 列表，在 `ErasePathAdvice` 下新增 `risk_flags` 与 `action_candidates`。
+3. 在 `src/` 中通过统一 helper 生成结构化 evidence / risk / action-candidate，并由这些结构化字段派生现有自由文本视图，避免双重事实源。
+4. 在 `src/cli_application.cpp` 中升级 `inspect --detail` 的文本呈现，使其显式输出 evidence、risk 和 action-candidate 分组，但不破坏默认 `inspect`。
+5. 在 `tests/` 中补齐 API、advisor 和 CLI 的结构化字段断言，且测试不依赖真实设备。
+6. 在 `docs/` 中同步更新 requirements、architecture、api、cli、safety 和 algorithm 文档，明确这仍然是 **read-only preflight**，不是设备级 destructive command 执行。
+
+### 本轮设计审查后的刻意不做
+
+- 不在这一轮实现 JSON 导出。
+- 不在这一轮新增独立 `InspectPreflightPlan` 顶层公共类型。
+- 不在这一轮输出完整敏感设备标识。
+- 不在这一轮新增任何 ATA / NVMe / PSID destructive command 执行路径。
+- 不在这一轮把 report / certificate 伪装成已经存在的能力。
