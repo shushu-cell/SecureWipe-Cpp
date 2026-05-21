@@ -827,3 +827,27 @@
 1. 压缩重复逻辑，确保结构化字段生成链路更清晰。
 2. 继续保持默认 `inspect` 与 read-only preflight 边界稳定。
 3. 每轮均以可执行验证和文档同步收尾，再分别提交与 push。
+
+## 2026-05-21 结构化证据与预执行计划实现后审查 / 重构
+
+### 第 1 轮：evidence 追加链路去重
+
+#### 发现的问题
+
+- `src/device_capability_inspector.cpp` 中 `append_probe_evidence(...)` 与 `append_capability_evidence(...)` 维护了同一段“同时写入自由文本和结构化 evidence”的重复逻辑。
+- 这种重复会放大后续漂移风险：如果以后新增 evidence 字段或调整派生顺序，容易只改一处。
+
+#### 本轮修改
+
+- 抽出共享 `append_evidence(...)` helper，统一负责把单条 evidence 同步写入 `evidence_items` 与自由文本 `evidence`。
+- 保留原有 `append_probe_evidence(...)` 与 `append_capability_evidence(...)` 作为窄包装，避免扩大调用点改动面。
+
+#### 刻意不做
+
+- 不改变任何 `EvidenceSubject / EvidenceSource / EvidenceConfidence` 的语义。
+- 不改变当前平台探测逻辑与 CLI 输出。
+
+#### 验证
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。

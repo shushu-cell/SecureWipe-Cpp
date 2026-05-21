@@ -106,19 +106,29 @@ constexpr std::array kReviewPolicies{
     },
 };
 
+void append_evidence(
+    std::vector<std::string>& evidence,
+    std::vector<CapabilityEvidenceItem>& evidence_items,
+    EvidenceSubject subject,
+    EvidenceSource source,
+    EvidenceConfidence confidence,
+    std::string summary) {
+    evidence_items.push_back(CapabilityEvidenceItem{
+        .subject = subject,
+        .source = source,
+        .confidence = confidence,
+        .summary = summary,
+    });
+    evidence.push_back(std::move(summary));
+}
+
 void append_probe_evidence(
     DeviceProbeSnapshot& snapshot,
     EvidenceSubject subject,
     EvidenceSource source,
     EvidenceConfidence confidence,
     std::string summary) {
-    snapshot.evidence_items.push_back(CapabilityEvidenceItem{
-        .subject = subject,
-        .source = source,
-        .confidence = confidence,
-        .summary = summary,
-    });
-    snapshot.evidence.push_back(std::move(summary));
+    append_evidence(snapshot.evidence, snapshot.evidence_items, subject, source, confidence, std::move(summary));
 }
 
 void append_capability_evidence(
@@ -127,13 +137,7 @@ void append_capability_evidence(
     EvidenceSource source,
     EvidenceConfidence confidence,
     std::string summary) {
-    capabilities.evidence_items.push_back(CapabilityEvidenceItem{
-        .subject = subject,
-        .source = source,
-        .confidence = confidence,
-        .summary = summary,
-    });
-    capabilities.evidence.push_back(std::move(summary));
+    append_evidence(capabilities.evidence, capabilities.evidence_items, subject, source, confidence, std::move(summary));
 }
 
 std::string_view review_label(ReviewKind review_kind) noexcept {
