@@ -456,3 +456,16 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- 未把 `ReviewBeforeWipe` 也塞进同一映射表，因为该路径仍然是条件化决策，不适合伪装成静态表项
 	- 未调整现有原因文案，只收敛了生成位置
 	- 未把 advisor 进一步拆成策略类层次，当前文件规模和规则数量还不需要那种抽象
+
+### 第 3 轮：新增能力测试支撑层收口
+
+- 识别到的坏味道：`tests/capability_inspection_tests.cpp` 中反复手写 fake probe、inspection context、`InspectionReport` 默认值和 `ReviewBeforeWipe` 报告初始化逻辑；这些默认值一旦调整，很容易出现只改一部分测试的漂移。
+- 采取的重构：
+	- 新增 `tests/capability_test_support.h`
+	- 抽出 `FakeDeviceCapabilityProbe`
+	- 抽出 `make_inspection_context(...)`、`make_report(...)`、`make_review_before_wipe_report(...)`
+	- 让能力相关测试只表达各自真正关心的差异字段，而不是重复铺开默认初始化
+- 刻意不改动的部分：
+	- 未把这些 helper 合并到通用 `test_support.h`，因为它们显式依赖能力探测内部类型，仍属于特性专属支撑层
+	- 未把能力测试拆成多个源文件，当前测试规模仍然适合保留在单个专用翻译单元里
+	- 未引入第三方测试框架或更重的 fixture 体系，保持现有轻量测试风格

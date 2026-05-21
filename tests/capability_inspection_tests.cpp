@@ -2,8 +2,8 @@
 
 #include <sstream>
 
+#include "capability_test_support.h"
 #include "src/internal/cli_application.h"
-#include "src/internal/secure_wipe_engine.h"
 #include "secure_wipe.h"
 #include "test_support.h"
 
@@ -15,19 +15,12 @@ using test_support::matches_any;
 using test_support::read_field_value;
 using test_support::require;
 using test_support::write_text_file;
+using capability_test_support::FakeDeviceCapabilityProbe;
+using capability_test_support::make_inspection_context;
+using capability_test_support::make_report;
+using capability_test_support::make_review_before_wipe_report;
 
 namespace fs = std::filesystem;
-
-class FakeDeviceCapabilityProbe final : public securewipe::detail::DeviceCapabilityProbe {
-public:
-    securewipe::detail::DeviceProbeSnapshot snapshot;
-
-    securewipe::detail::DeviceProbeSnapshot probe(const fs::path& path, securewipe::StorageKind storage_kind) const override {
-        (void)path;
-        (void)storage_kind;
-        return snapshot;
-    }
-};
 
 void test_cli_inspect_detail_reports_capability_fields() {
     TempDir temp;
@@ -65,10 +58,7 @@ void test_device_capability_inspector_maps_probe_snapshot() {
     probe.snapshot.evidence.push_back("fake capability probe evidence");
 
     securewipe::detail::DeviceCapabilityInspector inspector(probe);
-        const securewipe::detail::DeviceInspectionContext context{
-                .resolved_path = "ignored",
-                .storage_kind = securewipe::StorageKind::SolidState,
-        };
+        const auto context = make_inspection_context(securewipe::StorageKind::SolidState);
         const auto capabilities = inspector.inspect(context);
 
     require(capabilities.bus_kind == securewipe::DeviceBusKind::Usb,
@@ -89,10 +79,7 @@ void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative(
     probe.snapshot.bus_kind = securewipe::DeviceBusKind::Unknown;
 
     securewipe::detail::DeviceCapabilityInspector inspector(probe);
-        const securewipe::detail::DeviceInspectionContext context{
-                .resolved_path = "ignored",
-                .storage_kind = securewipe::StorageKind::RotationalDisk,
-        };
+        const auto context = make_inspection_context(securewipe::StorageKind::RotationalDisk);
         const auto capabilities = inspector.inspect(context);
 
     require(capabilities.device_sanitize_review == securewipe::CapabilityState::Unknown,
@@ -102,12 +89,9 @@ void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative(
 }
 
 void test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets() {
-    securewipe::InspectionReport report;
-    report.ok = true;
-    report.target_kind = securewipe::TargetKind::RegularFile;
-    report.storage_kind = securewipe::StorageKind::SolidState;
-    report.recommendation = securewipe::StrategyRecommendation::ReviewBeforeWipe;
-    report.device_capabilities.bus_kind = securewipe::DeviceBusKind::Nvme;
+        securewipe::InspectionReport report = make_review_before_wipe_report(
+                securewipe::StorageKind::SolidState,
+                securewipe::DeviceBusKind::Nvme);
     report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Supported;
 
     const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
@@ -118,12 +102,9 @@ void test_erase_path_advisor_prefers_device_sanitize_review_for_ssd_like_targets
 }
 
 void test_erase_path_advisor_falls_back_to_crypto_erase_review() {
-    securewipe::InspectionReport report;
-    report.ok = true;
-    report.target_kind = securewipe::TargetKind::RegularFile;
-    report.storage_kind = securewipe::StorageKind::SolidState;
-    report.recommendation = securewipe::StrategyRecommendation::ReviewBeforeWipe;
-    report.device_capabilities.bus_kind = securewipe::DeviceBusKind::Scsi;
+        securewipe::InspectionReport report = make_review_before_wipe_report(
+                securewipe::StorageKind::SolidState,
+                securewipe::DeviceBusKind::Scsi);
     report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Unknown;
     report.device_capabilities.crypto_erase_review = securewipe::CapabilityState::Supported;
 
@@ -135,11 +116,9 @@ void test_erase_path_advisor_falls_back_to_crypto_erase_review() {
 }
 
 void test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths() {
-    securewipe::InspectionReport report;
-    report.ok = true;
-    report.target_kind = securewipe::TargetKind::RegularFile;
-    report.storage_kind = securewipe::StorageKind::RotationalDisk;
-    report.recommendation = securewipe::StrategyRecommendation::BestEffortFileOverwrite;
+        securewipe::InspectionReport report = make_report(
+                securewipe::StrategyRecommendation::BestEffortFileOverwrite,
+                securewipe::StorageKind::RotationalDisk);
     report.device_capabilities.bus_kind = securewipe::DeviceBusKind::Sata;
     report.device_capabilities.device_sanitize_review = securewipe::CapabilityState::Supported;
 
@@ -149,9 +128,7 @@ void test_erase_path_advisor_keeps_best_effort_for_rotational_file_paths() {
 }
 
 void test_erase_path_advisor_reports_unknown_when_no_recommendation_exists() {
-    securewipe::InspectionReport report;
-    report.ok = true;
-    report.recommendation = securewipe::StrategyRecommendation::None;
+        const securewipe::InspectionReport report = make_report(securewipe::StrategyRecommendation::None);
 
     const auto advice = securewipe::detail::ErasePathAdvisor{}.advise(report);
     require(advice.preferred_method == securewipe::EraseMethod::Unknown,
