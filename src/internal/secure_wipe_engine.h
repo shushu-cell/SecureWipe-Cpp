@@ -31,6 +31,11 @@ struct DeviceProbeSnapshot {
     std::vector<std::string> evidence;
 };
 
+struct DeviceInspectionContext {
+    fs::path resolved_path;
+    StorageKind storage_kind = StorageKind::Unknown;
+};
+
 class OperationReporter {
 public:
     virtual ~OperationReporter() = default;
@@ -90,7 +95,7 @@ class DeviceCapabilityInspector final {
 public:
     explicit DeviceCapabilityInspector(const DeviceCapabilityProbe& probe) noexcept;
 
-    [[nodiscard]] DeviceCapabilities inspect(const fs::path& path, StorageKind storage_kind) const;
+    [[nodiscard]] DeviceCapabilities inspect(const DeviceInspectionContext& context) const;
 
 private:
     const DeviceCapabilityProbe& probe_;

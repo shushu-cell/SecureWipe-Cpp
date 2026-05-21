@@ -365,14 +365,20 @@ DeviceCapabilityInspector::DeviceCapabilityInspector(const DeviceCapabilityProbe
     : probe_(probe) {
 }
 
-DeviceCapabilities DeviceCapabilityInspector::inspect(const fs::path& path, StorageKind storage_kind) const {
-    const DeviceProbeSnapshot snapshot = probe_.probe(path, storage_kind);
+DeviceCapabilities DeviceCapabilityInspector::inspect(const DeviceInspectionContext& context) const {
+    const DeviceProbeSnapshot snapshot = probe_.probe(context.resolved_path, context.storage_kind);
 
     DeviceCapabilities capabilities;
     capabilities.bus_kind = snapshot.bus_kind;
     capabilities.trim_support = snapshot.trim_support;
-    capabilities.device_sanitize_review = classify_review_state(ReviewKind::DeviceSanitize, snapshot, storage_kind);
-    capabilities.crypto_erase_review = classify_review_state(ReviewKind::CryptoErase, snapshot, storage_kind);
+    capabilities.device_sanitize_review = classify_review_state(
+        ReviewKind::DeviceSanitize,
+        snapshot,
+        context.storage_kind);
+    capabilities.crypto_erase_review = classify_review_state(
+        ReviewKind::CryptoErase,
+        snapshot,
+        context.storage_kind);
     capabilities.is_removable_media = snapshot.is_removable_media;
     capabilities.usb_bridge_suspected = snapshot.usb_bridge_suspected;
     capabilities.evidence = snapshot.evidence;

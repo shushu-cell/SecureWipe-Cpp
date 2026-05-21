@@ -39,8 +39,11 @@ InspectionReport SecureWipeFacade::inspect(std::string_view path) const {
         return report;
     }
 
-    const fs::path resolved = inspector_.resolve_path(path_from_view(path));
-    report.device_capabilities = device_capability_inspector_.inspect(resolved, report.storage_kind);
+    const DeviceInspectionContext inspection_context{
+        .resolved_path = inspector_.resolve_path(path_from_view(path)),
+        .storage_kind = report.storage_kind,
+    };
+    report.device_capabilities = device_capability_inspector_.inspect(inspection_context);
     report.erase_path_advice = erase_path_advisor_.advise(report);
     return report;
 }

@@ -65,7 +65,11 @@ void test_device_capability_inspector_maps_probe_snapshot() {
     probe.snapshot.evidence.push_back("fake capability probe evidence");
 
     securewipe::detail::DeviceCapabilityInspector inspector(probe);
-    const auto capabilities = inspector.inspect("ignored", securewipe::StorageKind::SolidState);
+        const securewipe::detail::DeviceInspectionContext context{
+                .resolved_path = "ignored",
+                .storage_kind = securewipe::StorageKind::SolidState,
+        };
+        const auto capabilities = inspector.inspect(context);
 
     require(capabilities.bus_kind == securewipe::DeviceBusKind::Usb,
             "DeviceCapabilityInspector should preserve the probed bus kind");
@@ -85,7 +89,11 @@ void test_device_capability_inspector_keeps_rotational_unknown_bus_conservative(
     probe.snapshot.bus_kind = securewipe::DeviceBusKind::Unknown;
 
     securewipe::detail::DeviceCapabilityInspector inspector(probe);
-    const auto capabilities = inspector.inspect("ignored", securewipe::StorageKind::RotationalDisk);
+        const securewipe::detail::DeviceInspectionContext context{
+                .resolved_path = "ignored",
+                .storage_kind = securewipe::StorageKind::RotationalDisk,
+        };
+        const auto capabilities = inspector.inspect(context);
 
     require(capabilities.device_sanitize_review == securewipe::CapabilityState::Unknown,
             "Unknown bus on rotational storage should keep device sanitize review conservative");

@@ -428,3 +428,18 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `cmake --build build`
 - `ctest --test-dir build -C Debug --output-on-failure`
 - 结果：完整编译通过、全部测试通过。
+
+## 2026-05-21 新一轮三次迭代重构
+
+### 第 1 轮：能力探测输入上下文化
+
+- 识别到的坏味道：`DeviceCapabilityInspector::inspect(...)` 通过“已解析路径 + storage kind”两个分离参数工作，调用点需要手动保持这两个值一致；这类隐式配对参数在后续扩展 probe 上下文时容易出现错传或漏传。
+- 采取的重构：
+	- 新增内部值对象 `DeviceInspectionContext`
+	- `DeviceCapabilityInspector::inspect(...)` 改为接收统一上下文，而不是分散的两个参数
+	- `SecureWipeFacade::inspect(...)` 在编排处一次性构造能力探测上下文
+	- 能力相关测试同步改为通过上下文对象调用 inspector
+- 刻意不改动的部分：
+	- 未改动 `DeviceCapabilityProbe::probe(...)` 的底层接口，因为平台 probe 目前只实际依赖路径与 `StorageKind`
+	- 未把 `InspectionReport` 直接作为 probe 输入，避免让 probe 层依赖更大的上层对象
+	- 未扩展新的公共 API，此上下文类型保持在内部边界
