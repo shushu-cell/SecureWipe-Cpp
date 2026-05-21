@@ -7,5 +7,6 @@ site/
 .DS_Store
 
 # editor
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
