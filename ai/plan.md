@@ -874,3 +874,26 @@
 
 - `cmake --build build` 通过。
 - `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+
+### 第 3 轮：CLI detail 输出职责拆分
+
+#### 发现的问题
+
+- `print_detailed_inspection_report(...)` 同时负责稳定 detail 字段、structured evidence fallback、risk 输出、candidate 输出和 reason 输出。
+- 当前功能虽正确，但如果后续继续扩展 detail 输出，这个函数最容易演变成新的“渲染堆栈入口”。
+
+#### 本轮修改
+
+- 新增 `print_capability_evidence(...)`，专门处理结构化 evidence 与自由文本 fallback。
+- 新增 `print_preflight_advice(...)`，专门处理 `risk_flags`、`action_candidates`、`blockers` 与 `reasons` 的输出。
+- 让 `print_detailed_inspection_report(...)` 只保留稳定 detail 头字段和这两个窄 helper 的编排职责。
+
+#### 刻意不做
+
+- 不改变任何 detail 字段名称、输出顺序或字符串格式。
+- 不引入新的 CLI 开关，也不把文本输出改成 JSON 导向。
+
+#### 验证
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。

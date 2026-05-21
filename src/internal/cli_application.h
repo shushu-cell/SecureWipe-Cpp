@@ -70,6 +70,8 @@ private:
     int run_wipe_directory(const CommandRequest& request) const;
     void print_inspection_report(const InspectionReport& report, bool detail) const;
     void print_detailed_inspection_report(const InspectionReport& report) const;
+    void print_capability_evidence(const DeviceCapabilities& capabilities) const;
+    void print_preflight_advice(const ErasePathAdvice& advice) const;
 
     std::ostream& output_;
     std::ostream& error_output_;

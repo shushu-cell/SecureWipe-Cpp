@@ -412,28 +412,35 @@ void CommandLineApplication::print_detailed_inspection_report(const InspectionRe
     write_field(output_, "usb-bridge-suspected", report.device_capabilities.usb_bridge_suspected ? "yes"sv : "no"sv);
     write_field(output_, "preferred-erase-method", to_string(report.erase_path_advice.preferred_method));
 
-    if (!report.device_capabilities.evidence_items.empty()) {
-        for (const auto& item : report.device_capabilities.evidence_items) {
+    print_capability_evidence(report.device_capabilities);
+    print_preflight_advice(report.erase_path_advice);
+}
+
+void CommandLineApplication::print_capability_evidence(const DeviceCapabilities& capabilities) const {
+    if (!capabilities.evidence_items.empty()) {
+        for (const auto& item : capabilities.evidence_items) {
             write_field(output_, "capability-evidence", format_evidence_item(item));
         }
     } else {
-        for (const auto& evidence : report.device_capabilities.evidence) {
+        for (const auto& evidence : capabilities.evidence) {
             write_field(output_, "capability-evidence", evidence);
         }
     }
+}
 
-    for (const auto risk : report.erase_path_advice.risk_flags) {
+void CommandLineApplication::print_preflight_advice(const ErasePathAdvice& advice) const {
+    for (const auto risk : advice.risk_flags) {
         write_field(output_, "preflight-risk", to_string(risk));
     }
 
-    for (const auto& candidate : report.erase_path_advice.action_candidates) {
+    for (const auto& candidate : advice.action_candidates) {
         write_field(output_, "preflight-action", format_action_candidate(candidate));
         for (const auto& blocker : candidate.blockers) {
             write_field(output_, "preflight-blocker", format_action_blocker(candidate, blocker));
         }
     }
 
-    for (const auto& reason : report.erase_path_advice.reasons) {
+    for (const auto& reason : advice.reasons) {
         write_field(output_, "erase-advice", reason);
     }
 }
