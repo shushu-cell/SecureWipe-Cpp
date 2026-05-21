@@ -229,6 +229,12 @@ sequenceDiagram
 - 它不会渗透到公共 API 或擦除引擎对象中。
 - 当前仓库将 CLI11 vendored 到 [third_party/][third-party-dir]，避免构建时网络依赖进入主流程。
 
+### JSON 导出依赖仍停留在表现层边界
+
+- `inspect --json` 当前使用 vendored 的 `nlohmann/json` 进行只读序列化。
+- 该依赖只服务于 CLI 的 JSON 导出，不进入公共 API 或擦除引擎对象。
+- 当前仓库同样将其 vendored 到 [third_party/][third-party-dir]，保持离线可构建。
+
 ### 文档视为架构资产
 
 - [docs/][docs-dir] 与代码一起演进，而不是作为发布前补充材料。

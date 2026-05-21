@@ -16,6 +16,13 @@ target_include_directories(CLI11 SYSTEM INTERFACE
 	${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
+add_library(nlohmann_json INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+
+target_include_directories(nlohmann_json SYSTEM INTERFACE
+	${CMAKE_CURRENT_SOURCE_DIR}/third_party
+)
+
 add_library(securewipe_lib STATIC
 	src/device_capability_inspector.cpp
 	src/directory_wiper.cpp
@@ -46,6 +53,7 @@ add_executable(securewipe
 )
 
 target_link_libraries(securewipe PRIVATE securewipe_lib CLI11::CLI11)
+target_link_libraries(securewipe PRIVATE nlohmann_json::nlohmann_json)
 
 if(MSVC)
 	target_compile_options(securewipe PRIVATE /W4 /permissive-)

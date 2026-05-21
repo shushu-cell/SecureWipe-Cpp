@@ -4,7 +4,7 @@ add_executable(securewipe_tests
     test_secure_wipe.cpp
 )
 
-target_link_libraries(securewipe_tests PRIVATE securewipe_lib CLI11::CLI11)
+target_link_libraries(securewipe_tests PRIVATE securewipe_lib CLI11::CLI11 nlohmann_json::nlohmann_json)
 
 target_include_directories(securewipe_tests
     PRIVATE

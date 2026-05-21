@@ -503,3 +503,29 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
 - `ctest --test-dir build -C Debug --output-on-failure`
 - 结果：聚焦能力测试与全量测试均通过，行为保持稳定。
+
+## 2026-05-22 inspect JSON 第 1 阶段重构
+
+### 识别到的坏味道
+
+- `src/cli_application.cpp` 中 `inspect --json` 通过手写 `write_json_string(...)`、`write_json_key(...)`、`write_json_array(...)` 和多层 lambda 拼装整个 `InspectionReport` JSON，对一个已经有成熟 header-only 库可用的场景来说，这属于重复造轮子。
+- 当前仓库已经接受 vendored header-only 第三方依赖模式，CLI11 就是现成先例；继续维持自写 JSON 基础设施，维护收益偏低。
+
+### 采取的重构
+
+- 将 `nlohmann/json` `v3.11.3` vendored 到 `third_party/nlohmann/json.hpp`。
+- 新增依赖许可证文件 `third_party/NLOHMANN-JSON-LICENSE`，保持第三方依赖记录显式化。
+- 在 `CMakeLists.txt` 中新增 `nlohmann_json::nlohmann_json` 接口目标，并接入 `securewipe` 与 `securewipe_tests`。
+- 将 `print_json_inspection_report(...)` 改为基于 `nlohmann::ordered_json` 的对象构造与 `dump()` 输出，移除手写字符串转义和数组拼装 helper。
+
+### 刻意不改动的部分
+
+- 未改变 `inspect --json` 的 schema、字段名、字段顺序意图或 read-only 语义。
+- 未在本阶段把 JSON 序列化职责从 CLI 层抽离；这一点保留到下一阶段的 SOLID 边界重构。
+- 未把 `nlohmann/json` 引入领域层或公共 API；它当前仍只服务于 CLI JSON 导出。
+
+### 验证
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
+- 结果：构建通过，聚焦测试通过，JSON 行为保持稳定。

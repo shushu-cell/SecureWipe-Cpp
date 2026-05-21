@@ -1,6 +1,7 @@
 #include "internal/cli_application.h"
 
 #include <CLI/CLI.hpp>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <array>
@@ -172,69 +173,6 @@ std::string select_help(
     }
 
     return app.help();
-}
-
-void write_json_string(std::ostream& output, std::string_view value) {
-    static constexpr std::string_view kHexDigits = "0123456789abcdef";
-
-    output << '"';
-    for (const unsigned char character : value) {
-        switch (character) {
-        case '"':
-            output << "\\\"";
-            break;
-        case '\\':
-            output << "\\\\";
-            break;
-        case '\b':
-            output << "\\b";
-            break;
-        case '\f':
-            output << "\\f";
-            break;
-        case '\n':
-            output << "\\n";
-            break;
-        case '\r':
-            output << "\\r";
-            break;
-        case '\t':
-            output << "\\t";
-            break;
-        default:
-            if (character < 0x20U) {
-                output << "\\u00"
-                       << kHexDigits[(character >> 4U) & 0x0FU]
-                       << kHexDigits[character & 0x0FU];
-            } else {
-                output << static_cast<char>(character);
-            }
-            break;
-        }
-    }
-    output << '"';
-}
-
-void write_json_key(std::ostream& output, std::string_view key) {
-    write_json_string(output, key);
-    output << ':';
-}
-
-template <typename Range, typename Writer>
-void write_json_array(std::ostream& output, const Range& values, Writer&& writer) {
-    output << '[';
-
-    bool is_first = true;
-    for (const auto& value : values) {
-        if (!is_first) {
-            output << ',';
-        }
-
-        writer(value);
-        is_first = false;
-    }
-
-    output << ']';
 }
 
 } // namespace
@@ -480,140 +418,79 @@ void CommandLineApplication::print_inspection_report(const InspectionReport& rep
 }
 
 void CommandLineApplication::print_json_inspection_report(const InspectionReport& report) const {
-    const auto write_boolean = [this](bool value) {
-        output_ << (value ? "true" : "false");
+    using ordered_json = nlohmann::ordered_json;
+
+    const auto string_array = [](const auto& values) {
+        ordered_json array = ordered_json::array();
+        for (const auto& value : values) {
+            array.push_back(value);
+        }
+
+        return array;
     };
 
-    const auto write_string = [this](std::string_view value) {
-        write_json_string(output_, value);
+    const auto evidence_items = [this](const std::vector<CapabilityEvidenceItem>& items) {
+        ordered_json array = ordered_json::array();
+        for (const auto& item : items) {
+            ordered_json object = ordered_json::object();
+            object["subject"] = to_string(item.subject);
+            object["source"] = to_string(item.source);
+            object["confidence"] = to_string(item.confidence);
+            object["summary"] = item.summary;
+            array.push_back(std::move(object));
+        }
+
+        return array;
     };
 
-    const auto write_string_array = [this, &write_string](const auto& values) {
-        write_json_array(output_, values, [&write_string](std::string_view value) {
-            write_string(value);
-        });
+    const auto action_candidates = [this, &string_array](const std::vector<ActionCandidate>& candidates) {
+        ordered_json array = ordered_json::array();
+        for (const auto& candidate : candidates) {
+            ordered_json object = ordered_json::object();
+            object["method"] = to_string(candidate.method);
+            object["state"] = to_string(candidate.state);
+            object["target_scope"] = to_string(candidate.target_scope);
+            object["summary"] = candidate.summary;
+            object["blockers"] = string_array(candidate.blockers);
+            array.push_back(std::move(object));
+        }
+
+        return array;
     };
 
-    const auto write_evidence_item = [this, &write_string](const CapabilityEvidenceItem& item) {
-        output_ << '{';
-        write_json_key(output_, "subject");
-        write_string(to_string(item.subject));
-        output_ << ',';
-        write_json_key(output_, "source");
-        write_string(to_string(item.source));
-        output_ << ',';
-        write_json_key(output_, "confidence");
-        write_string(to_string(item.confidence));
-        output_ << ',';
-        write_json_key(output_, "summary");
-        write_string(item.summary);
-        output_ << '}';
-    };
+    ordered_json device_capabilities = ordered_json::object();
+    device_capabilities["bus_kind"] = to_string(report.device_capabilities.bus_kind);
+    device_capabilities["trim_support"] = to_string(report.device_capabilities.trim_support);
+    device_capabilities["device_sanitize_review"] = to_string(report.device_capabilities.device_sanitize_review);
+    device_capabilities["crypto_erase_review"] = to_string(report.device_capabilities.crypto_erase_review);
+    device_capabilities["is_removable_media"] = report.device_capabilities.is_removable_media;
+    device_capabilities["usb_bridge_suspected"] = report.device_capabilities.usb_bridge_suspected;
+    device_capabilities["evidence"] = string_array(report.device_capabilities.evidence);
+    device_capabilities["evidence_items"] = evidence_items(report.device_capabilities.evidence_items);
 
-    const auto write_action_candidate = [this, &write_string, &write_string_array](const ActionCandidate& candidate) {
-        output_ << '{';
-        write_json_key(output_, "method");
-        write_string(to_string(candidate.method));
-        output_ << ',';
-        write_json_key(output_, "state");
-        write_string(to_string(candidate.state));
-        output_ << ',';
-        write_json_key(output_, "target_scope");
-        write_string(to_string(candidate.target_scope));
-        output_ << ',';
-        write_json_key(output_, "summary");
-        write_string(candidate.summary);
-        output_ << ',';
-        write_json_key(output_, "blockers");
-        write_string_array(candidate.blockers);
-        output_ << '}';
-    };
+    ordered_json erase_path_advice = ordered_json::object();
+    erase_path_advice["preferred_method"] = to_string(report.erase_path_advice.preferred_method);
+    erase_path_advice["reasons"] = string_array(report.erase_path_advice.reasons);
+    erase_path_advice["risk_flags"] = ordered_json::array();
+    for (const auto risk : report.erase_path_advice.risk_flags) {
+        erase_path_advice["risk_flags"].push_back(to_string(risk));
+    }
+    erase_path_advice["action_candidates"] = action_candidates(report.erase_path_advice.action_candidates);
 
-    const auto write_device_capabilities = [this, &write_boolean, &write_string, &write_string_array, &write_evidence_item](
-                                               const DeviceCapabilities& capabilities) {
-        output_ << '{';
-        write_json_key(output_, "bus_kind");
-        write_string(to_string(capabilities.bus_kind));
-        output_ << ',';
-        write_json_key(output_, "trim_support");
-        write_string(to_string(capabilities.trim_support));
-        output_ << ',';
-        write_json_key(output_, "device_sanitize_review");
-        write_string(to_string(capabilities.device_sanitize_review));
-        output_ << ',';
-        write_json_key(output_, "crypto_erase_review");
-        write_string(to_string(capabilities.crypto_erase_review));
-        output_ << ',';
-        write_json_key(output_, "is_removable_media");
-        write_boolean(capabilities.is_removable_media);
-        output_ << ',';
-        write_json_key(output_, "usb_bridge_suspected");
-        write_boolean(capabilities.usb_bridge_suspected);
-        output_ << ',';
-        write_json_key(output_, "evidence");
-        write_string_array(capabilities.evidence);
-        output_ << ',';
-        write_json_key(output_, "evidence_items");
-        write_json_array(output_, capabilities.evidence_items, [&write_evidence_item](const CapabilityEvidenceItem& item) {
-            write_evidence_item(item);
-        });
-        output_ << '}';
-    };
+    ordered_json inspection_report = ordered_json::object();
+    inspection_report["ok"] = report.ok;
+    inspection_report["dangerous"] = report.dangerous;
+    inspection_report["target_kind"] = to_string(report.target_kind);
+    inspection_report["storage_kind"] = to_string(report.storage_kind);
+    inspection_report["recommendation"] = to_string(report.recommendation);
+    inspection_report["device_capabilities"] = std::move(device_capabilities);
+    inspection_report["erase_path_advice"] = std::move(erase_path_advice);
+    inspection_report["canonical_path"] = report.canonical_path;
+    inspection_report["volume_name"] = report.volume_name;
+    inspection_report["message"] = report.message;
+    inspection_report["warnings"] = string_array(report.warnings);
 
-    const auto write_erase_path_advice = [this, &write_string, &write_string_array, &write_action_candidate](const ErasePathAdvice& advice) {
-        output_ << '{';
-        write_json_key(output_, "preferred_method");
-        write_string(to_string(advice.preferred_method));
-        output_ << ',';
-        write_json_key(output_, "reasons");
-        write_string_array(advice.reasons);
-        output_ << ',';
-        write_json_key(output_, "risk_flags");
-        write_json_array(output_, advice.risk_flags, [this, &write_string](PreflightRisk risk) {
-            write_string(to_string(risk));
-        });
-        output_ << ',';
-        write_json_key(output_, "action_candidates");
-        write_json_array(output_, advice.action_candidates, [&write_action_candidate](const ActionCandidate& candidate) {
-            write_action_candidate(candidate);
-        });
-        output_ << '}';
-    };
-
-    output_ << '{';
-    write_json_key(output_, "ok");
-    write_boolean(report.ok);
-    output_ << ',';
-    write_json_key(output_, "dangerous");
-    write_boolean(report.dangerous);
-    output_ << ',';
-    write_json_key(output_, "target_kind");
-    write_string(to_string(report.target_kind));
-    output_ << ',';
-    write_json_key(output_, "storage_kind");
-    write_string(to_string(report.storage_kind));
-    output_ << ',';
-    write_json_key(output_, "recommendation");
-    write_string(to_string(report.recommendation));
-    output_ << ',';
-    write_json_key(output_, "device_capabilities");
-    write_device_capabilities(report.device_capabilities);
-    output_ << ',';
-    write_json_key(output_, "erase_path_advice");
-    write_erase_path_advice(report.erase_path_advice);
-    output_ << ',';
-    write_json_key(output_, "canonical_path");
-    write_string(report.canonical_path);
-    output_ << ',';
-    write_json_key(output_, "volume_name");
-    write_string(report.volume_name);
-    output_ << ',';
-    write_json_key(output_, "message");
-    write_string(report.message);
-    output_ << ',';
-    write_json_key(output_, "warnings");
-    write_string_array(report.warnings);
-    output_ << "}\n";
+    output_ << inspection_report.dump() << '\n';
 }
 
 void CommandLineApplication::print_detailed_inspection_report(const InspectionReport& report) const {

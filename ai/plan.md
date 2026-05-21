@@ -936,3 +936,27 @@
 - `ctest --test-dir build -C Debug --output-on-failure`
 - `python tools/validate_docs_code_links.py`
 - `.venv\Scripts\python -m mkdocs build --strict`
+
+## 2026-05-22 inspect JSON 第 1 阶段重构检查点
+
+### 本轮已落地的实现范围
+
+- 将 `nlohmann/json` `v3.11.3` 以 vendored header-only 方式引入到 `third_party/`。
+- 新增依赖专属许可证文件 `third_party/NLOHMANN-JSON-LICENSE`。
+- CMake 现已显式暴露 `nlohmann_json::nlohmann_json` 接口目标，并接入 `securewipe` 与 `securewipe_tests`。
+- `inspect --json` 已从手写字符串转义/对象拼装改为基于 `nlohmann::ordered_json` 的原位实现。
+
+### 本轮刻意不做
+
+- 暂不改变 `inspect --json` 的字段名、嵌套 shape 或 read-only 语义。
+- 暂不把 JSON 序列化逻辑从 `src/cli_application.cpp` 抽离；该职责重构留到下一阶段。
+- 暂不引入新的顶层 JSON schema、版本字段或额外输出格式。
+
+### 当前验证结果
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+
+### 下一阶段
+
+- 将 JSON 序列化从 `src/cli_application.cpp` 抽离到新的私有 formatter/serializer 模块，收窄 CLI 应用层职责。
