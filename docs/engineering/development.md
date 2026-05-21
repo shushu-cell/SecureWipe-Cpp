@@ -88,24 +88,24 @@ python tools/validate_docs_code_links.py
 - 文档变更已通过 `mkdocs build --strict`
 - [README.md][readme-file] 只保留仓库入口性质的信息，避免和 [docs/][docs-dir] 大量重复
 
-[include-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/include
-[src-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/src
-[src-internal-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/src/internal
-[tests-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/tests
-[docs-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs
-[mkdocs-yml]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/mkdocs.yml
-[github-workflows-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/.github/workflows
-[tools-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/tools
-[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
-[native-file-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/native_file.cpp
-[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
-[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
-[secure-wipe-engine-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe_engine.cpp
-[cli-application-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/cli_application.cpp
-[secure-wipe-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp
-[guide-cli-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/guide/cli.md
-[guide-safety-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/guide/safety.md
-[architecture-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/engineering/architecture.md
-[api-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/engineering/api.md
-[development-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/engineering/development.md
-[readme-file]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/README.md
+[include-dir]: ../../include/
+[src-dir]: ../../src/
+[src-internal-dir]: ../../src/internal/
+[tests-dir]: ../../tests/
+[docs-dir]: ../index.md
+[mkdocs-yml]: ../../mkdocs.yml
+[github-workflows-dir]: ../../.github/workflows/
+[tools-dir]: ../../tools/
+[path-inspector-src]: ../../src/path_inspector.cpp
+[native-file-src]: ../../src/native_file.cpp
+[file-wiper-src]: ../../src/file_wiper.cpp
+[directory-wiper-src]: ../../src/directory_wiper.cpp
+[secure-wipe-engine-src]: ../../src/secure_wipe_engine.cpp
+[cli-application-src]: ../../src/cli_application.cpp
+[secure-wipe-src]: ../../src/secure_wipe.cpp
+[guide-cli-doc]: ../guide/cli.md
+[guide-safety-doc]: ../guide/safety.md
+[architecture-doc]: architecture.md
+[api-doc]: api.md
+[development-doc]: development.md
+[readme-file]: ../../README.md

@@ -47,7 +47,8 @@ python tools/validate_docs_code_links.py
 
 仓库内源码、头文件、测试、文档源文件和关键配置文件在正文、表格、列表中出现时，必须写成可跳转链接，而不是单独的反引号文本。
 
-- 正文、表格、列表中的仓库路径引用统一使用 Markdown 链接，目标指向对应 GitHub 源文件或目录。
+- 源 Markdown 中的仓库路径引用统一使用工作区相对路径链接，这样在 VS Code 编辑器里可以直接从文档跳转到本地文件。
+- 对 [src/](../../src/)、[include/](../../include/)、[tests/](../../tests/)、[tools/](../../tools/)、[.github/](../../.github/)、[refs/](../../refs/) 这类 [docs/][docs-dir] 目录外目标，站点构建时会通过 [tools/mkdocs_local_repo_links.py][docs-link-hook] 自动转换成站点可工作的只读链接；文档源文件本身仍保持本地相对路径。
 - 在 [docs/engineering/api.md][api-doc] 中，公共类型、顶层函数以及关键配置字段至少应链接到对应章节或 [include/secure_wipe.h][secure-wipe-header] 中的定义。
 - Mermaid 图中的代码路径节点必须补 `click` 指令，让图中的代码引用也能直接跳转。
 - 纯命令示例或代码块中的路径可按命令原样保留，但解释性内容里的仓库引用仍必须链接化。
@@ -55,13 +56,13 @@ python tools/validate_docs_code_links.py
 
 推荐写法：
 
-- `[src/secure_wipe.cpp](https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp)`
-- `[include/secure_wipe.h](https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h)`
+- `[src/secure_wipe.cpp](../../src/secure_wipe.cpp)`
+- `[include/secure_wipe.h](../../include/secure_wipe.h)`
 
 Mermaid 示例：
 
 ```text
-click ApiFacade "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp" "src/secure_wipe.cpp"
+click ApiFacade "../../src/secure_wipe.cpp" "src/secure_wipe.cpp"
 ```
 
 ## 同步更新原则
@@ -106,11 +107,12 @@ click ApiFacade "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/sec
 - Mermaid 图是否仍能表达当前边界与主干流程
 - README 是否仍是“入口页”而不是“第二份完整文档”
 
-[docs-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs
-[mkdocs-yml]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/mkdocs.yml
-[docs-requirements]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/requirements.txt
-[docs-javascripts-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs/javascripts
-[docs-link-validator]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/tools/validate_docs_code_links.py
-[api-doc]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/docs/engineering/api.md
-[readme-file]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/README.md
-[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
+[docs-dir]: ../index.md
+[mkdocs-yml]: ../../mkdocs.yml
+[docs-requirements]: ../requirements.txt
+[docs-javascripts-dir]: ../javascripts/
+[docs-link-validator]: ../../tools/validate_docs_code_links.py
+[docs-link-hook]: ../../tools/mkdocs_local_repo_links.py
+[api-doc]: api.md
+[readme-file]: ../../README.md
+[secure-wipe-header]: ../../include/secure_wipe.h

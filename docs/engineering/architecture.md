@@ -91,11 +91,11 @@ flowchart TB
 	Docs -. 说明 .-> CLI
 	Docs -. 说明 .-> Engine
 
-	click Main "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/main.cpp" "src/main.cpp"
-	click Header "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h" "include/secure_wipe.h"
-	click ApiFacade "https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp" "src/secure_wipe.cpp"
-	click Tests "https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/tests" "tests/"
-	click Docs "https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs" "docs/"
+	click Main "../../src/main.cpp#L1" "src/main.cpp"
+	click Header "../../include/secure_wipe.h#L1" "include/secure_wipe.h"
+	click ApiFacade "../../src/secure_wipe.cpp#L1" "src/secure_wipe.cpp"
+	click Tests "../../tests/" "tests/"
+	click Docs "../index.md" "docs/"
 ```
 
 ## 关键对象职责
@@ -241,21 +241,21 @@ sequenceDiagram
 - 对外 API 保持稳定，优先扩展值类型和 recommendation 语义
 - CLI 只负责暴露能力，不直接内联平台分支或设备命令
 
-[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
-[secure-wipe-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp
-[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
-[device-capability-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/device_capability_inspector.cpp
-[erase-path-advisor-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/erase_path_advisor.cpp
-[native-file-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/native_file.cpp
-[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
-[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
-[secure-wipe-engine-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe_engine.cpp
-[secure-wipe-engine-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/internal/secure_wipe_engine.h
-[cli-application-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/cli_application.cpp
-[cli-application-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/internal/cli_application.h
-[tests-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/tests
-[docs-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs
-[mkdocs-yml]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/mkdocs.yml
-[include-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/include
-[src-internal-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/src/internal
-[third-party-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/third_party
+[secure-wipe-header]: ../../include/secure_wipe.h
+[secure-wipe-src]: ../../src/secure_wipe.cpp
+[path-inspector-src]: ../../src/path_inspector.cpp
+[device-capability-inspector-src]: ../../src/device_capability_inspector.cpp
+[erase-path-advisor-src]: ../../src/erase_path_advisor.cpp
+[native-file-src]: ../../src/native_file.cpp
+[file-wiper-src]: ../../src/file_wiper.cpp
+[directory-wiper-src]: ../../src/directory_wiper.cpp
+[secure-wipe-engine-src]: ../../src/secure_wipe_engine.cpp
+[secure-wipe-engine-header]: ../../src/internal/secure_wipe_engine.h
+[cli-application-src]: ../../src/cli_application.cpp
+[cli-application-header]: ../../src/internal/cli_application.h
+[tests-dir]: ../../tests/
+[docs-dir]: ../index.md
+[mkdocs-yml]: ../../mkdocs.yml
+[include-dir]: ../../include/
+[src-internal-dir]: ../../src/internal/
+[third-party-dir]: ../../third_party/

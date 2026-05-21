@@ -118,13 +118,13 @@ flowchart TB
 2. 再更新系统架构视图与扩展点。
 3. 最后再落代码与测试。
 
-[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
-[src-internal-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/src/internal
-[mkdocs-yml]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/mkdocs.yml
-[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
-[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
-[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
-[device-capability-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/device_capability_inspector.cpp
-[erase-path-advisor-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/erase_path_advisor.cpp
-[test-secure-wipe]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/tests/test_secure_wipe.cpp
-[docs-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs
+[secure-wipe-header]: ../../include/secure_wipe.h
+[src-internal-dir]: ../../src/internal/
+[mkdocs-yml]: ../../mkdocs.yml
+[path-inspector-src]: ../../src/path_inspector.cpp
+[file-wiper-src]: ../../src/file_wiper.cpp
+[directory-wiper-src]: ../../src/directory_wiper.cpp
+[device-capability-inspector-src]: ../../src/device_capability_inspector.cpp
+[erase-path-advisor-src]: ../../src/erase_path_advisor.cpp
+[test-secure-wipe]: ../../tests/test_secure_wipe.cpp
+[docs-dir]: ../index.md

@@ -265,13 +265,13 @@ flowchart TD
 - 新增设备级 sanitization、报告系统或新的 recommendation 语义
 - 安全边界或 CLI 帮助文本发生实质变化
 
-[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
-[secure-wipe-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp
-[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
-[device-capability-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/device_capability_inspector.cpp
-[erase-path-advisor-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/erase_path_advisor.cpp
-[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
-[native-file-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/native_file.cpp
-[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
-[cli-application-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/cli_application.cpp
-[deep-research-report]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/refs/deep-research-report.md
+[secure-wipe-header]: ../../include/secure_wipe.h
+[secure-wipe-src]: ../../src/secure_wipe.cpp
+[path-inspector-src]: ../../src/path_inspector.cpp
+[device-capability-inspector-src]: ../../src/device_capability_inspector.cpp
+[erase-path-advisor-src]: ../../src/erase_path_advisor.cpp
+[file-wiper-src]: ../../src/file_wiper.cpp
+[native-file-src]: ../../src/native_file.cpp
+[directory-wiper-src]: ../../src/directory_wiper.cpp
+[cli-application-src]: ../../src/cli_application.cpp
+[deep-research-report]: ../../refs/deep-research-report.md

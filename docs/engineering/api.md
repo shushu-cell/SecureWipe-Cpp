@@ -166,22 +166,22 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 - 内部引擎头文件不属于对外 API，不保证兼容性
 - 当顶层行为变化时，应同步更新本页和 CLI 文档
 
-[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
-[pattern-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L10
-[wipe-options-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L15
-[wipe-options-passes-field]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L16
-[wipe-options-pattern-field]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L17
-[wipe-options-block-size-field]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L18
-[target-kind-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L21
-[storage-kind-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L29
-[strategy-recommendation-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L38
-[device-bus-kind-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L46
-[capability-state-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L57
-[erase-method-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L64
-[device-capabilities-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L74
-[erase-path-advice-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L84
-[wipe-result-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L89
-[inspection-report-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L98
-[inspect-target-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L112
-[wipe-file-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L113
-[wipe-directory-def]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h#L114
+[secure-wipe-header]: ../../include/secure_wipe.h
+[pattern-def]: ../../include/secure_wipe.h#L10
+[wipe-options-def]: ../../include/secure_wipe.h#L15
+[wipe-options-passes-field]: ../../include/secure_wipe.h#L16
+[wipe-options-pattern-field]: ../../include/secure_wipe.h#L17
+[wipe-options-block-size-field]: ../../include/secure_wipe.h#L18
+[target-kind-def]: ../../include/secure_wipe.h#L21
+[storage-kind-def]: ../../include/secure_wipe.h#L29
+[strategy-recommendation-def]: ../../include/secure_wipe.h#L38
+[device-bus-kind-def]: ../../include/secure_wipe.h#L46
+[capability-state-def]: ../../include/secure_wipe.h#L57
+[erase-method-def]: ../../include/secure_wipe.h#L64
+[device-capabilities-def]: ../../include/secure_wipe.h#L74
+[erase-path-advice-def]: ../../include/secure_wipe.h#L84
+[wipe-result-def]: ../../include/secure_wipe.h#L89
+[inspection-report-def]: ../../include/secure_wipe.h#L98
+[inspect-target-def]: ../../include/secure_wipe.h#L112
+[wipe-file-def]: ../../include/secure_wipe.h#L113
+[wipe-directory-def]: ../../include/secure_wipe.h#L114

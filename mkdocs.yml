@@ -20,6 +20,12 @@ theme:
 plugins:
   - search
 
+hooks:
+  - tools/mkdocs_local_repo_links.py
+
+extra:
+  repo_source_ref: main
+
 extra_javascript:
   - https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js
   - javascripts/mermaid.js
