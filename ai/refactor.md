@@ -383,3 +383,48 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 	- CLI 输出契约保持稳定
 	- 平台分支仍保持显式命令式结构，未为了“更现代”而把副作用流程压成难读的抽象
 - 本次重构结束时，代码层验证仍以完整编译与完整测试通过为准。
+
+## 2026-05-21 测试支撑层收口
+
+### 目标与约束
+
+- 目标：把新增能力相关测试从 `tests/test_secure_wipe.cpp` 的单文件堆叠里抽出，形成更清晰的测试支撑层与特性测试边界。
+- 约束：
+	- 继续保留当前最小自建测试 harness，不引入新的测试框架
+	- 不改变现有测试语义与断言口径
+	- 仍保证 `securewipe_tests` 单个可执行入口
+
+### 识别到的坏味道
+
+- `tests/test_secure_wipe.cpp` 同时承担测试入口、通用 helper、CLI 回归测试、文件/目录擦除测试，以及新增能力特性测试，职责已经开始混杂。
+- 能力特性测试依赖 `FakeDeviceCapabilityProbe`、advisor 断言和 `inspect --detail` 字段检查，这些内容与基础 wipe / inspect 回归不是同一关注点。
+- 通用 helper 如临时目录、文本写入、字段提取和断言函数已经形成共享测试支撑，但仍内联在单文件里。
+
+### 采取的重构
+
+- 新增 `tests/test_support.h`，收口：
+	- `TempDir`
+	- `require(...)`
+	- `write_text_file(...)`
+	- `read_field_value(...)`
+	- `matches_any(...)`
+	- `contains(...)`
+- 新增 `tests/capability_inspection_tests.h/.cpp`，将以下新增能力相关测试迁出主测试文件：
+	- `inspect --detail` 能力字段输出断言
+	- `DeviceCapabilityInspector` fake probe 映射断言
+	- `rotational + unknown bus` 保守结论断言
+	- `ErasePathAdvisor` 的 sanitize / crypto-erase / best-effort 路径断言
+- `tests/test_secure_wipe.cpp` 保留测试主入口和通用 CLI / wipe 回归测试，通过 `run_capability_inspection_tests()` 组合能力测试集。
+- `tests/CMakeLists.txt` 把能力特性测试作为单独翻译单元编入同一测试可执行文件。
+
+### 刻意不改动的部分
+
+- 未引入 Catch2 / GoogleTest 等外部测试框架，因为当前仓库仍以轻量自建 harness 为主，新增框架会扩大范围。
+- 未把所有测试继续细分成更多翻译单元，当前仅先收口新增能力相关测试，避免过度拆分。
+- 未改变 `securewipe_tests` 单 executable + 单 main 的运行方式，保持现有 CI / CTest 接线稳定。
+
+### 验证
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- 结果：完整编译通过、全部测试通过。

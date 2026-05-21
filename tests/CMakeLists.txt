@@ -1,5 +1,6 @@
 add_executable(securewipe_tests
     ../src/cli_application.cpp
+    capability_inspection_tests.cpp
     test_secure_wipe.cpp
 )
 
