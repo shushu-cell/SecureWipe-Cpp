@@ -2,6 +2,8 @@
 
 本页用于记录 SecureWipe-Cpp 当前版本采用的安全擦除相关算法、选型理由、源码实现位置、参考文献与评估结论。它与[安全边界](../guide/safety.md)和[系统架构](../engineering/architecture.md)互补：安全边界说明“当前版本真正承诺什么”，本页说明“这些承诺是如何通过当前算法与代码结构落地的”。
 
+如果你对操作系统、文件系统、SSD、`trim/discard`、设备级 sanitization 等术语并不熟悉，建议先阅读[背景知识与术语](background-and-terms.md)，再回到本页。
+
 ## 文档目标与适用范围
 
 当前项目实现的是**应用层、文件级、best-effort 的安全擦除工作流**，不是完整的设备级 sanitization 产品。
@@ -26,7 +28,7 @@
 
 ### 文件级覆盖不等于设备级清除
 
-应用层能直接控制的是“文件路径、文件句柄和文件系统可见范围内的数据”。对现代 SSD、eMMC、U 盘、日志型文件系统、快照型文件系统而言，底层控制器、FTL、写放大、重映射和元数据日志都可能让“应用看到的覆盖写”与“介质上所有历史数据都已清除”不是同一件事。
+应用层能直接控制的是“文件路径、文件句柄和文件系统可见范围内的数据”。对现代 SSD、eMMC、U 盘、日志型文件系统、快照型文件系统而言，底层控制器、FTL、写放大、重映射和元数据日志都可能让“应用看到的覆盖写”与“介质上所有历史数据都已清除”不是同一件事。相关背景可参考[为什么 SSD 上的覆盖写不等于彻底清除](background-and-terms.md#ssd-limitations)。
 
 因此，当前项目的核心术语不是“绝对不可恢复”，而是：
 
@@ -78,13 +80,13 @@
 - Linux：通过 `/proc/self/mounts` 与 `/sys/class/block/...` 推断块设备、可移动状态、discard 能力和总线形态
 - macOS / 其他平台：当前保守回退为 `Unknown` / `Restricted` 风格的能力结论
 
-这里的关键不是“多探测几个字段”，而是把**推断**与**确认**明确分开：
+这里的关键不是“多探测几个字段”，而是把**推断**与**确认**明确分开。若你对总线、USB bridge、trim/discard、device sanitize review 这些词不熟，建议配合[存储接口与设备形态](background-and-terms.md#device-bus-terms)、[设备级擦除相关术语](background-and-terms.md#sanitization-terms)一起看：
 
 - `DeviceBusKind` 只表示总线或设备形态级别线索
 - `CapabilityState` 强制区分 `Unknown / Unsupported / Supported / Restricted`
 - `EraseMethod` 当前只表达“更适合 review 哪条路径”，不表达 destructive device command 已可执行
 
-因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。
+因此，`inspect --detail` 中出现 `device-sanitize-review: supported` 的语义是“当前值得进入设备级 sanitize review”，而不是“当前版本已经执行并验证了 sanitize 命令”。这和[项目输出里几个最容易误解的词](background-and-terms.md#project-terms)中的定义保持一致。
 
 ### 单文件安全擦除工作流
 
@@ -220,7 +222,7 @@ flowchart TD
 - 在介质未知、固定盘、可移动盘或 SSD 线索场景下主动提高 warning 与 recommendation 等级
 - 不把多次覆盖或随机覆盖写成“绝对安全”
 
-但它仍然有明确上限：
+但它仍然有明确上限。对这些上限的通俗解释，可参考[给非技术读者的一个短结论](background-and-terms.md#plain-language-summary)：
 
 - 无法控制设备级 remapping、wear leveling 和隐藏块
 - 无法证明日志型 / 快照型文件系统没有留下额外副本
@@ -264,6 +266,7 @@ flowchart TD
 - [src/path_inspector.cpp][path-inspector-src]、[src/file_wiper.cpp][file-wiper-src]、[src/directory_wiper.cpp][directory-wiper-src] 中的主流程变化
 - 新增设备级 sanitization、报告系统或新的 recommendation 语义
 - 安全边界或 CLI 帮助文本发生实质变化
+- 新出现但尚未被 [背景知识与术语](background-and-terms.md) 解释的领域术语
 
 [secure-wipe-header]: ../../include/secure_wipe.h
 [secure-wipe-src]: ../../src/secure_wipe.cpp

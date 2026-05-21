@@ -74,6 +74,7 @@ click ApiFacade "../../src/secure_wipe.cpp" "src/secure_wipe.cpp"
 3. 文档修改完成后，必须通过 `mkdocs build --strict`。
 4. 如果是纯文档更新，推荐单独形成一次提交，便于审阅与回溯。
 5. 文档中的仓库代码/配置引用必须通过链接校验脚本，不能退回成不可跳转的反引号文本。
+6. 当文档中引入新的存储、安全擦除、文件系统或设备能力术语时，必须同步更新 [背景知识与术语](../technical/background-and-terms.md)。
 
 ## 图示规范
 
