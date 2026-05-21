@@ -19,6 +19,11 @@ struct ReviewSelection {
     std::string_view primary_reason;
 };
 
+struct CurrentPathCandidateSpec {
+    EraseMethod method;
+    std::string_view summary;
+};
+
 struct ReviewSelectionRule {
     CapabilityState DeviceCapabilities::*review_state;
     EraseMethod preferred_method;
@@ -79,6 +84,19 @@ void add_action_candidate(ErasePathAdvice& advice, ActionCandidate candidate) {
     advice.action_candidates.push_back(std::move(candidate));
 }
 
+ActionCandidate make_action_candidate(
+    EraseMethod method,
+    ActionCandidateState state,
+    ActionTargetScope target_scope,
+    std::string_view summary) {
+    return ActionCandidate{
+        .method = method,
+        .state = state,
+        .target_scope = target_scope,
+        .summary = std::string(summary),
+    };
+}
+
 bool has_platform_probe_gap(const DeviceCapabilities& capabilities) {
     return std::ranges::any_of(capabilities.evidence_items, [](const CapabilityEvidenceItem& item) {
         return item.source == EvidenceSource::PlatformFallback;
@@ -125,12 +143,18 @@ ActionCandidateState direct_mapping_state(EraseMethod method) noexcept {
     return ActionCandidateState::Unavailable;
 }
 
-std::optional<EraseMethod> current_path_candidate_method(const InspectionReport& report) {
+std::optional<CurrentPathCandidateSpec> current_path_candidate_spec(const InspectionReport& report) {
     switch (report.target_kind) {
     case TargetKind::RegularFile:
-        return EraseMethod::BestEffortFileOverwrite;
+        return CurrentPathCandidateSpec{
+            EraseMethod::BestEffortFileOverwrite,
+            "Best-effort file overwrite remains available for the current path, but media caveats should be reviewed first.",
+        };
     case TargetKind::Directory:
-        return EraseMethod::BestEffortDirectoryWipe;
+        return CurrentPathCandidateSpec{
+            EraseMethod::BestEffortDirectoryWipe,
+            "Best-effort directory wipe remains available for the current path, but media caveats should be reviewed first.",
+        };
     case TargetKind::Missing:
     case TargetKind::Symlink:
     case TargetKind::Other:
@@ -140,24 +164,19 @@ std::optional<EraseMethod> current_path_candidate_method(const InspectionReport&
     return std::nullopt;
 }
 
-std::string_view current_path_candidate_summary(const InspectionReport& report) {
-    return report.target_kind == TargetKind::Directory
-        ? "Best-effort directory wipe remains available for the current path, but media caveats should be reviewed first."
-        : "Best-effort file overwrite remains available for the current path, but media caveats should be reviewed first.";
-}
-
 void append_current_path_candidate(ErasePathAdvice& advice, const InspectionReport& report) {
-    const auto method = current_path_candidate_method(report);
-    if (!method.has_value()) {
+    const auto spec = current_path_candidate_spec(report);
+    if (!spec.has_value()) {
         return;
     }
 
-    add_action_candidate(advice, ActionCandidate{
-        .method = *method,
-        .state = ActionCandidateState::Available,
-        .target_scope = ActionTargetScope::CurrentPath,
-        .summary = std::string(current_path_candidate_summary(report)),
-    });
+    add_action_candidate(
+        advice,
+        make_action_candidate(
+            spec->method,
+            ActionCandidateState::Available,
+            ActionTargetScope::CurrentPath,
+            spec->summary));
 }
 
 const DirectAdviceMapping* find_direct_advice_mapping(StrategyRecommendation recommendation) {
@@ -174,12 +193,11 @@ void append_direct_recommendation_advice(ErasePathAdvice& advice, const Inspecti
         advice.preferred_method = mapping->preferred_method;
         add_reason(advice.reasons, mapping->primary_reason);
 
-        ActionCandidate candidate{
-            .method = mapping->preferred_method,
-            .state = direct_mapping_state(mapping->preferred_method),
-            .target_scope = ActionTargetScope::CurrentPath,
-            .summary = std::string(mapping->primary_reason),
-        };
+        ActionCandidate candidate = make_action_candidate(
+            mapping->preferred_method,
+            direct_mapping_state(mapping->preferred_method),
+            ActionTargetScope::CurrentPath,
+            mapping->primary_reason);
         if (candidate.state == ActionCandidateState::Blocked && !report.message.empty()) {
             add_candidate_blocker(candidate, report.message);
         }
@@ -211,12 +229,11 @@ void append_review_before_wipe_reasons(ErasePathAdvice& advice, const Inspection
     advice.preferred_method = selection.preferred_method;
     add_reason(advice.reasons, selection.primary_reason);
 
-    ActionCandidate device_candidate{
-        .method = selection.preferred_method,
-        .state = ActionCandidateState::Preferred,
-        .target_scope = ActionTargetScope::UnderlyingDevice,
-        .summary = std::string(selection.primary_reason),
-    };
+    ActionCandidate device_candidate = make_action_candidate(
+        selection.preferred_method,
+        ActionCandidateState::Preferred,
+        ActionTargetScope::UnderlyingDevice,
+        selection.primary_reason);
 
     if (capabilities.usb_bridge_suspected) {
         const std::string_view blocker = "USB-attached storage can hide the underlying device capabilities from non-destructive inspection.";

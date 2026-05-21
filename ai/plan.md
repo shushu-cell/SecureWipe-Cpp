@@ -851,3 +851,26 @@
 
 - `cmake --build build` 通过。
 - `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+
+### 第 2 轮：preflight candidate 构造链路收敛
+
+#### 发现的问题
+
+- `src/erase_path_advisor.cpp` 中 direct advice、review advice 和 current-path fallback 都在各自拼装 `ActionCandidate`。
+- `current-path` 候选动作的 `method` 与 `summary` 还分散在两个 helper 中，后续很容易出现 method 改了但 summary 没同步的漂移。
+
+#### 本轮修改
+
+- 新增共享 `make_action_candidate(...)` helper，统一候选动作的基础构造方式。
+- 把 `current-path` fallback 收敛为单个 `current_path_candidate_spec(...)`，让 method 和 summary 成对返回。
+- 让 direct recommendation 与 review-before-wipe 分支都复用同一套 candidate 基础构造逻辑。
+
+#### 刻意不做
+
+- 不改变任何 candidate 的状态、scope、blocker 或输出顺序。
+- 不改动 `ErasePathAdvice` 的公共结构和 CLI 渲染格式。
+
+#### 验证
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
