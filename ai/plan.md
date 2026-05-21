@@ -401,3 +401,273 @@
 2. 继续复用 `inspect`，新增 `--detail` 模式承载新增输出。
 3. phase 1 对 macOS 保守回退为 `Unknown / Restricted`，优先把 Windows / Linux 做扎实。
 4. 保留现有 `StrategyRecommendation`，增量添加 `DeviceCapabilities` 与 `ErasePathAdvice`，不重写现有 recommendation 体系。
+
+## 2026-05-21 下一步核心功能计划（结构化证据与预执行计划）
+
+### 结论
+
+结合 `refs/deep-research-report.md` 与当前 `docs/`，下一步最值得添加的核心功能，不是立刻执行 ATA Secure Erase / NVMe Sanitize，也不是先补 free-space wipe，而是：
+
+**把当前 `inspect` 升级为“结构化设备证据 + 预执行擦除计划（read-only preflight）”能力。**
+
+换句话说，系统下一步应先学会：
+
+- 用结构化字段而不只是自由文本，说明当前 recommendation 背后的证据来源与可信度
+- 把“当前路径可做什么”和“底层整设备值得 review 什么”明确区分开
+- 输出一个可复核、可测试、可导出的 preflight 结果，为后续真实设备级执行与验证报告打基础
+
+这一阶段仍然是**非破坏性**的，不执行任何设备级 destructive command。
+
+### 为什么是这一步
+
+当前代码和文档状态已经说明了一件事：项目已经完成了“路径检查 + 文件/目录 best-effort 擦除 + 非破坏性设备能力解释”这三件事，但还没进入“可验证的 sanitization orchestration”。
+
+研究报告和当前 docs 对下一步方向其实是一致的：
+
+1. `refs/deep-research-report.md` 反复强调，项目的真正价值不在于继续堆文件级覆盖花样，而在于把**设备语义、验证与审计链路**做起来。
+2. `docs/technical/secure-erasure-algorithms.md` 已经明确给出未来演进顺序：
+  - 先细化**结构化证据输出**
+  - 再建立 **ATA / NVMe 设备级执行与状态验证路径**
+  - 最后把**验证与报告**做成一等能力
+3. 当前 `inspect --detail` 虽然已经能输出 `device-bus`、`trim-support`、`device-sanitize-review` 等字段，但证据仍然主要停留在 `std::vector<std::string>` 风格的自由文本里，这不足以支撑下一阶段的设备级执行前置检查，更不足以支撑后续验证与报告。
+
+因此，最稳妥的小步迭代，不是直接跨进高风险 destructive path，而是先把“为什么得出这个建议”做成正式的、结构化的、可机读的工程资产。
+
+### 为什么不是别的功能
+
+#### 不是先做 ATA / NVMe 设备级执行
+
+- 当前 docs 仍把真实设备级 destructive 操作列为**当前非目标**。
+- 在没有结构化证据、target scope 建模、安全闸门和状态验证基线之前，直接做执行路径，风险过高。
+- 现在的 `EraseMethod::DeviceSanitizeReview` / `CryptoEraseReview` 语义仍然是“值得 review”，不是“已确认可执行”；跳过中间层会迫使代码和文档一起冒进。
+
+#### 不是先做 free-space wipe
+
+- 研究报告明确指出 free-space wipe 在 FAT32、系统盘、低剩余空间和现代文件系统场景下风险高、扰动大、边界复杂。
+- 它也不能解决当前项目最关键的差距：**设备级语义和验证链路仍不完整**。
+
+#### 不是先做取证级报告 / 审计证书
+
+- 当前系统还没有设备级执行状态、状态日志和可验证结果来源。
+- 在没有结构化 preflight artifact 的情况下，直接做“报告”只会把 CLI 文本包装成看起来更正式的输出，不够硬。
+
+#### 不是先做 crypto-delete / crash consistency
+
+- 研究报告明确把这些方向放在更高复杂度层级。
+- 它们会引入新的存储模型、状态模型和一致性模型，不适合作为当前 CLI 原型的下一小步。
+
+### 建议批准的下一阶段范围
+
+本次待批准、待后续实现的范围，仅限于：
+
+**阶段 2：结构化 inspect 证据与预执行计划。**
+
+它是现有 `inspect` 的增强，不是新的 destructive 子系统。建议范围收敛为：
+
+- 为 `inspect_target(...)` 增量补入结构化 evidence / risk / action-plan 数据
+- 为 CLI 增量补入更清晰的 detailed preflight 展示
+- 在不破坏默认 `inspect` 简洁输出的前提下，为未来 JSON / report 导出预留 schema
+
+明确不包含：
+
+- ATA Secure Erase / ATA Sanitize 执行
+- NVMe Sanitize / Format 执行
+- PSID revert
+- free-space wipe
+- GUI
+- 取证级证书
+- 崩溃恢复日志
+
+### 目标效果
+
+这一阶段完成后，系统在执行 `inspect --detail` 或等价详细模式时，应该能更可信地回答下面这些问题：
+
+- 当前 recommendation 是基于哪几类证据得出的：路径安全、平台查询、sysfs / storage stack、启发式保守规则，还是受限场景
+- 当前结论是“观测到的事实”“启发式推断”还是“由于限制只能保守处理”
+- 当前更适合的动作是“继续文件级 best-effort”“进入整设备 sanitize review”“进入 crypto-erase review”还是“直接阻断”
+- 当前推荐动作的作用域到底是“当前 path”还是“底层整设备 review”
+- 哪些阻塞项让某条路径不能执行，例如 USB bridge、network share、平台探测缺口、target scope 不匹配等
+
+### 具体实现方案
+
+#### 1. 领域模型扩展
+
+当前 `DeviceCapabilities::evidence` 和 `ErasePathAdvice::reasons` 都是自由文本集合，这对人类可读性足够，但对后续验证链路不够。
+
+建议增量引入以下结构化模型，而不是推翻当前 API：
+
+- `EvidenceSource`
+  - 描述证据来自哪里，例如 `PathInspection`、`WindowsStorageQuery`、`LinuxSysfs`、`MountMetadata`、`HeuristicGuard`
+- `EvidenceConfidence`
+  - 至少区分 `Observed`、`Inferred`、`ConservativeFallback`
+- `EvidenceSubject`
+  - 指向当前证据在解释什么，例如 `BusKind`、`TrimSupport`、`DeviceSanitizeReview`、`CryptoEraseReview`、`Restriction`
+- `RiskFlag`
+  - 显式表达 `UsbBridgeSuspected`、`NetworkBacked`、`VirtualizedDevice`、`PlatformProbeGap`、`WholeDeviceReviewRequired` 等
+- `ActionCandidateState`
+  - 建议至少区分 `Preferred`、`ReviewOnly`、`Blocked`、`Unavailable`
+- `ActionTargetScope`
+  - 显式区分 `CurrentPath` 与 `UnderlyingDevice`
+- `CapabilityEvidenceItem`
+  - 单条结构化证据：subject、source、confidence、summary、optional details
+- `ActionCandidate`
+  - 一条预执行动作候选：method、target_scope、state、reasons、blockers
+- `InspectPreflightPlan`
+  - 聚合 `risk_flags`、`action_candidates`、以及可选的诊断说明
+
+与现有公共 API 的兼容策略建议如下：
+
+- 保留当前 `DeviceCapabilities::evidence` 与 `ErasePathAdvice::reasons`
+- 新增结构化字段作为增量补充
+- 由结构化模型派生当前自由文本，而不是让两套数据源并行漂移
+
+这样做的好处是：
+
+- 不破坏当前 CLI 和外部调用方的基本使用方式
+- 为后续 JSON 导出、报告系统和设备级执行前置检查提供稳定 schema
+- 让 docs 里反复强调的“推断 vs 确认”真正落到可建模对象上
+
+#### 2. 内部分层方案
+
+建议继续沿用当前架构，而不是新增大而全服务层：
+
+- `PathInspector`
+  - 继续负责目标类型、危险路径、粗粒度 `StorageKind`、基础 warning
+- `DeviceCapabilityInspector`
+  - 继续负责平台只读探测，但输出从“能力值 + 自由文本”扩展为“能力值 + 结构化 evidence items”
+- `ErasePathAdvisor`
+  - 从“首选路径 + 理由文本”扩展为“首选 advice + 多条 action candidates + blockers / reasons”
+- `SecureWipeFacade::inspect(...)`
+  - 继续做三段式编排，不把 schema 组装逻辑泄漏到 CLI
+
+当前阶段不建议新增一个全新 `InspectionService` 或 `ExecutionPlanner` 公共对象。理由是：现有 `inspect` 已经是自然入口，先在当前对象边界内演进，复杂度最低。
+
+#### 3. CLI 暴露方案
+
+建议继续复用 `inspect`，不新增新的破坏性命令，也不抢先设计“设备擦除执行”子命令。
+
+推荐的 CLI 方案：
+
+- 默认 `inspect <path>` 保持尽量稳定，继续输出简洁摘要
+- `inspect --detail <path>` 增加新的分组输出：
+  - structured capability evidence
+  - risk flags
+  - action candidates / blockers
+- 若实现成本可控，可以把 JSON 作为**阶段 2 的后半步**，例如：
+  - `inspect --json <path>`
+  - 或 `inspect --detail --format json`
+
+但即使加入 JSON，也应坚持以下约束：
+
+- 默认文本输出优先服务人工审查
+- JSON schema 必须围绕已有公共语义设计，而不是临时拼接 CLI 文本
+- 默认不输出完整敏感设备标识，避免把诊断信息误包装成“审计证书”
+
+#### 4. 测试方案
+
+这一阶段的测试重点，不是“当前机器到底是不是 NVMe”，而是“给定 probe 结果时，系统是否能稳定地产生正确 evidence / risk / plan”。
+
+建议：
+
+- 继续复用 `FakeDeviceCapabilityProbe`
+- 为 `DeviceCapabilityInspector` 增加 evidence-item 级断言
+- 为 `ErasePathAdvisor` 增加 action-candidate 顺序、state 与 blocker 断言
+- 为 CLI 增加 detailed 模式的 grouped-output 断言
+- 若加入 JSON，再补 schema 级测试：
+  - 核心字段存在
+  - 枚举值稳定
+  - 不依赖当前开发机真实磁盘
+
+#### 5. 文档同步方案
+
+一旦批准并实现，至少需要同步更新：
+
+- `docs/engineering/requirements.md`
+- `docs/engineering/architecture.md`
+- `docs/engineering/api.md`
+- `docs/guide/cli.md`
+- `docs/guide/safety.md`
+- `docs/technical/secure-erasure-algorithms.md`
+- 若引入新的术语枚举，还要同步 `docs/technical/background-and-terms.md`
+
+文档重点应放在：
+
+- 这一步仍然是 **read-only preflight**，不是 destructive command 执行
+- 输出变得更“结构化”和“可复核”，不代表已经得到设备厂商级验证
+- `UnderlyingDevice` 级候选动作只表示“值得进入整设备 review”，不是“当前 path 可以直接触发整盘清除”
+
+### 需要特别注意的问题
+
+#### 1. 不要把 path 级 inspect 和整设备级执行混为一谈
+
+这是当前系统迈向设备级能力时最容易踩的坑。
+
+用户检查的是一个 `path`，但 `DeviceSanitizeReview` / `CryptoEraseReview` 指向的往往是**底层整设备**。因此，preflight 模型里必须显式带 `ActionTargetScope`，否则后续 CLI 很容易给出误导性暗示。
+
+#### 2. 不要把启发式推断伪装成“设备已确认支持”
+
+当前 docs 已多次强调：`Supported` 在当前阶段仍然是“值得 review 的支持线索”，不是 destructive command 已可执行的最终结论。结构化 schema 需要进一步把这个事实编码进去，而不是继续让调用方从字符串语气里猜。
+
+#### 3. USB bridge / RAID / 虚拟盘 / 平台探测缺口必须显式成为 blocker
+
+这类场景不应只是 warning 文案，而应该进入 `risk_flags` 或 `action_candidates.blockers`。这样后续若进入真实设备级执行阶段，系统才能复用这些信号做硬性拒绝，而不是再次从文本里解析。
+
+#### 4. 默认不要泄露过多敏感设备标识
+
+若后续确实需要 model / serial / device path：
+
+- 默认应脱敏或部分隐藏
+- 仅在明确诊断模式下展开
+- 文档中应明确说明：这些字段属于诊断与 preflight，不属于证书级审计证明
+
+#### 5. 公共 API 需要加法式演进
+
+当前 `include/secure_wipe.h` 已被文档和测试广泛引用。下一阶段应避免：
+
+- 直接删除现有自由文本字段
+- 修改现有枚举的既有含义
+- 让 CLI 才知道如何拼装 structured preflight
+
+正确做法是：新增结构化字段，保留现有行为，并逐步让旧自由文本成为结构化模型的派生视图。
+
+### 小步迭代顺序（从易到难）
+
+建议按以下顺序推进，而不是直接跳到设备级 destructive 路径：
+
+1. **阶段 2A：结构化 evidence schema + 内部生成链路**
+  - 先把 evidence / risk / action-plan 模型在 API 与内部对象里建出来
+  - 仍然只保留现有 human-readable CLI
+
+2. **阶段 2B：`inspect --detail` 分组输出升级**
+  - 让人工审查时能直接看到 risk flags、candidate actions、scope、blockers
+  - 默认 `inspect` 保持稳定
+
+3. **阶段 2C：可选的 JSON 导出**
+  - 只在 2A / 2B 稳定后加入
+  - 服务后续自动化验证、报告系统和未来 UI，但当前仍以 CLI 为主
+
+4. **阶段 3：单平台、单协议、受限范围的设备级执行试点**
+  - 例如 Linux-first NVMe sanitize review -> execution path
+  - 必须复用前面已经稳定的 structured preflight schema
+
+5. **阶段 4：验证与报告**
+  - 在真实执行路径落地后，再把状态日志、抽样验证和更正式的报告做成一等能力
+
+### 本阶段验收口径（待批准后实现时使用）
+
+- `inspect` 默认输出不发生破坏性漂移
+- `inspect --detail` 能稳定输出新增的 evidence / risk / candidate-action 信息
+- 无法可靠确认能力时，系统输出保守结论，不夸大支持范围
+- 新增测试不依赖开发机真实磁盘型号或真实设备命令
+- 公共 API 以增量扩展为主，不破坏现有调用方式
+- `cmake --build build` 通过
+- `ctest --test-dir build -C Debug --output-on-failure` 通过
+- 若文档同步实现，`python tools/validate_docs_code_links.py` 与 `.venv\Scripts\python -m mkdocs build --strict` 也必须通过
+
+### 审查后建议批准的实现版本
+
+1. 先做“结构化证据 + 预执行计划”这一层，把当前 `inspect` 从自由文本解释升级为正式 preflight artifact。
+2. 继续复用 `inspect` 作为唯一入口，不在这一轮引入新的 destructive 子命令。
+3. 默认优先人工可读的 `--detail` 输出，JSON 导出放在同一阶段的后半步或下一小步，而不是一开始就把 CLI 重心转成数据导出。
+4. 把 `UnderlyingDevice` scope、`blockers`、`confidence` 做成 schema 的硬字段，而不是继续依赖解释性文案。
+5. 在这一层稳定之前，不批准真实 ATA / NVMe destructive command 执行进入主线实现。
