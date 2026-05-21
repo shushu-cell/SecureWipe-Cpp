@@ -49,6 +49,7 @@ endif()
 
 add_executable(securewipe
 	src/cli_application.cpp
+	src/inspection_report_json_formatter.cpp
 	src/main.cpp
 )
 

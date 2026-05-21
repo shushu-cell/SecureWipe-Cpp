@@ -960,3 +960,31 @@
 ### 下一阶段
 
 - 将 JSON 序列化从 `src/cli_application.cpp` 抽离到新的私有 formatter/serializer 模块，收窄 CLI 应用层职责。
+
+## 2026-05-22 inspect JSON 第 2 阶段重构检查点
+
+### 本轮已落地的实现范围
+
+- 新增私有 `InspectionReportJsonFormatter` 模块，承接 `InspectionReport` 的 JSON 序列化职责。
+- 将稳定枚举标签映射与 `inspect --json` 的 `nlohmann::ordered_json` 组装逻辑迁移到该模块。
+- `CommandLineApplication` 现仅保留 CLI 参数解析、退出码和文本/JSON 输出编排，对 JSON 细节改为委托调用。
+- `securewipe` 与 `securewipe_tests` 已同步编入新的 formatter 翻译单元。
+- `docs/engineering/architecture.md` 已同步更新表现层边界描述。
+
+### 本轮刻意不做
+
+- 不改变 `inspect --json` 的 schema、字段顺序意图或 read-only 语义。
+- 不把 `nlohmann/json` 引入公共 API、领域层或擦除引擎对象。
+- 不在本轮继续拆分 `inspect --detail` 的文本渲染逻辑；当前仅聚焦 JSON 职责下沉。
+
+### 当前验证结果
+
+- `cmake --build build` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests` 通过。
+- `ctest --test-dir build -C Debug --output-on-failure` 通过。
+- `python tools/validate_docs_code_links.py` 通过。
+- `.venv\Scripts\python -m mkdocs build --strict` 通过。
+
+### 当前结论
+
+- `inspect --json` 仍然是 CLI 表现层能力，但 JSON 序列化细节已经不再属于 `CommandLineApplication` 本身。

@@ -529,3 +529,32 @@ void configure_shared_wipe_options(CLI::App& command, std::string& path, WipeOpt
 - `cmake --build build`
 - `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
 - 结果：构建通过，聚焦测试通过，JSON 行为保持稳定。
+
+## 2026-05-22 inspect JSON 第 2 阶段重构
+
+### 识别到的坏味道
+
+- 即使第 1 阶段已经改用 `nlohmann/json`，`src/cli_application.cpp` 仍同时承担 CLI 参数解析、输出编排、稳定枚举标签映射和 `InspectionReport` 的 JSON 序列化细节，仍有两个不同的 reason to change。
+- `inspect --json` 的实现细节继续留在 `CommandLineApplication` 内，会让未来 JSON schema 演进或 formatter 复用继续直接触碰 CLI 应用层主文件。
+
+### 采取的重构
+
+- 新增 `src/internal/inspection_report_json_formatter.h` 与 `src/inspection_report_json_formatter.cpp`，把 JSON formatter 做成独立的私有表现层模块。
+- 将稳定枚举标签映射与 `InspectionReport` 到 `nlohmann::ordered_json` 的组装逻辑迁移到该模块。
+- `CommandLineApplication::print_json_inspection_report(...)` 现仅负责委托 `detail::write_json_inspection_report(...)`，不再内联 JSON 构造细节。
+- `CMakeLists.txt` 与 `tests/CMakeLists.txt` 同步接入新的 formatter 翻译单元，保证可执行与测试目标共享同一实现。
+
+### 刻意不改动的部分
+
+- 未改变 `inspect --json` 的字段名、嵌套 shape、字段顺序意图或 read-only 语义。
+- 未把 `nlohmann/json` 或 formatter 提升为公共 API；它仍然是 CLI 表现层内部实现。
+- 未继续拆分 `inspect --detail` 文本渲染逻辑，因为当前主要坏味道集中在 JSON 序列化职责，而不是整份 CLI 文件都必须立即打散。
+
+### 验证
+
+- `cmake --build build`
+- `ctest --test-dir build -C Debug --output-on-failure -R securewipe_tests`
+- `ctest --test-dir build -C Debug --output-on-failure`
+- `python tools/validate_docs_code_links.py`
+- `.venv\Scripts\python -m mkdocs build --strict`
+- 结果：聚焦测试、全量测试与文档校验均通过，职责拆分未引入行为回归。

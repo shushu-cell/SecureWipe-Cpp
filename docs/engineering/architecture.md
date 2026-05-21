@@ -38,7 +38,7 @@ flowchart LR
 | 公共接口层 | [include/secure_wipe.h][secure-wipe-header] | 提供稳定的对外 API、值类型和顶层函数 |
 | 外观层 | [src/secure_wipe.cpp][secure-wipe-src] | 将顶层函数转发到内部对象协作 |
 | 内部引擎层 | [src/path_inspector.cpp][path-inspector-src]、[src/device_capability_inspector.cpp][device-capability-inspector-src]、[src/erase_path_advisor.cpp][erase-path-advisor-src]、[src/native_file.cpp][native-file-src]、[src/file_wiper.cpp][file-wiper-src]、[src/directory_wiper.cpp][directory-wiper-src]、[src/secure_wipe_engine.cpp][secure-wipe-engine-src] + [src/internal/secure_wipe_engine.h][secure-wipe-engine-header] | 路径检查、设备能力探测、擦除路径建议、文件句柄管理、文件擦除、目录擦除、报告抽象与对象组合 |
-| CLI 应用层 | [src/cli_application.cpp][cli-application-src] + [src/internal/cli_application.h][cli-application-header] | 参数解析、帮助输出、CLI 返回码和表现逻辑 |
+| CLI 应用层 | [src/cli_application.cpp][cli-application-src]、[src/inspection_report_json_formatter.cpp][inspection-report-json-formatter-src] + [src/internal/cli_application.h][cli-application-header]、[src/internal/inspection_report_json_formatter.h][inspection-report-json-formatter-header] | 参数解析、帮助输出、CLI 返回码和表现逻辑 |
 | 测试层 | [tests/][tests-dir] | 回归行为与参数校验验证 |
 | 文档层 | [docs/][docs-dir]、[mkdocs.yml][mkdocs-yml] | 维护项目知识、使用方式和工程约束 |
 
@@ -49,6 +49,7 @@ flowchart TB
 	subgraph Entry[入口与表现层]
 		Main[src/main.cpp]
 		CLI[CommandLineApplication]
+		Formatter[InspectionReportJsonFormatter]
 	end
 
 	subgraph Contract[公共契约]
@@ -73,6 +74,7 @@ flowchart TB
 	end
 
 	Main --> CLI
+	CLI --> Formatter
 	CLI --> Header
 	CLI --> ApiFacade
 	Header --> ApiFacade
@@ -158,8 +160,14 @@ flowchart TB
 - 校验参数组合是否合法
 - 控制输出和退出码
 - 在 `inspect --detail` 中同时渲染稳定字段、结构化证据和结构化预执行候选动作
-- 在 `inspect --json` 中把同一份 read-only [InspectionReport][secure-wipe-header] 序列化为 JSON，而不是重新拼装平行计划对象
-- 作为 CLI 的唯一应用层对象
+- 将 `inspect --json` 委托给私有 formatter，把同一份 read-only [InspectionReport][secure-wipe-header] 序列化为 JSON，而不是重新拼装平行计划对象
+- 作为 CLI 的应用层编排对象，而不是 JSON 序列化细节的归属点
+
+### [InspectionReportJsonFormatter][inspection-report-json-formatter-src]
+
+- 持有 [InspectionReport][secure-wipe-header] 到 JSON 的只读序列化逻辑
+- 复用稳定枚举标签，把 `nlohmann/json` 约束在 CLI 表现层私有模块
+- 保持 JSON 输出与 `inspect --detail` 使用同一份领域语义，而不是创建平行计划对象
 
 ## 运行时视图
 
@@ -231,7 +239,7 @@ sequenceDiagram
 
 ### JSON 导出依赖仍停留在表现层边界
 
-- `inspect --json` 当前使用 vendored 的 `nlohmann/json` 进行只读序列化。
+- `inspect --json` 当前由私有 [InspectionReportJsonFormatter][inspection-report-json-formatter-src] 使用 vendored 的 `nlohmann/json` 进行只读序列化。
 - 该依赖只服务于 CLI 的 JSON 导出，不进入公共 API 或擦除引擎对象。
 - 当前仓库同样将其 vendored 到 [third_party/][third-party-dir]，保持离线可构建。
 
@@ -262,6 +270,8 @@ sequenceDiagram
 [secure-wipe-engine-header]: ../../src/internal/secure_wipe_engine.h
 [cli-application-src]: ../../src/cli_application.cpp
 [cli-application-header]: ../../src/internal/cli_application.h
+[inspection-report-json-formatter-src]: ../../src/inspection_report_json_formatter.cpp
+[inspection-report-json-formatter-header]: ../../src/internal/inspection_report_json_formatter.h
 [tests-dir]: ../../tests/
 [docs-dir]: ../index.md
 [mkdocs-yml]: ../../mkdocs.yml

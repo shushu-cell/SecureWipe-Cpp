@@ -50,18 +50,6 @@ private:
     [[nodiscard]] static ParseResult parse(const std::vector<std::string>& args);
     [[nodiscard]] static int to_exit_code(ExitCode exit_code) noexcept;
     static void write_field(std::ostream& output, std::string_view key, std::string_view value);
-    [[nodiscard]] static std::string_view to_string(TargetKind kind) noexcept;
-    [[nodiscard]] static std::string_view to_string(StorageKind kind) noexcept;
-    [[nodiscard]] static std::string_view to_string(StrategyRecommendation recommendation) noexcept;
-    [[nodiscard]] static std::string_view to_string(DeviceBusKind bus_kind) noexcept;
-    [[nodiscard]] static std::string_view to_string(CapabilityState state) noexcept;
-    [[nodiscard]] static std::string_view to_string(EraseMethod method) noexcept;
-    [[nodiscard]] static std::string_view to_string(EvidenceSubject subject) noexcept;
-    [[nodiscard]] static std::string_view to_string(EvidenceSource source) noexcept;
-    [[nodiscard]] static std::string_view to_string(EvidenceConfidence confidence) noexcept;
-    [[nodiscard]] static std::string_view to_string(PreflightRisk risk) noexcept;
-    [[nodiscard]] static std::string_view to_string(ActionCandidateState state) noexcept;
-    [[nodiscard]] static std::string_view to_string(ActionTargetScope target_scope) noexcept;
     [[nodiscard]] static std::string format_evidence_item(const CapabilityEvidenceItem& item);
     [[nodiscard]] static std::string format_action_candidate(const ActionCandidate& candidate);
     [[nodiscard]] static std::string format_action_blocker(const ActionCandidate& candidate, std::string_view blocker);
