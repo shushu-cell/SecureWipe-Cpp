@@ -65,7 +65,7 @@ flowchart TB
 | FR-04 | 系统必须支持目录递归擦除 | 提供 `wipe-dir <dir>`，支持 dry-run 与确认执行 |
 | FR-05 | 系统必须拒绝高风险目标 | 包括符号链接、危险目录、网络路径等当前不支持或高风险场景 |
 | FR-06 | 系统必须输出可判定结果 | CLI 通过稳定退出码表达帮助、执行失败和拒绝；库 API 返回结构化结果 |
-| FR-07 | 系统必须保留公共 API 边界 | 外部调用方只依赖 `include/secure_wipe.h`，不依赖实现层私有头 |
+| FR-07 | 系统必须保留公共 API 边界 | 外部调用方只依赖 [include/secure_wipe.h][secure-wipe-header]，不依赖实现层私有头 |
 | FR-08 | 系统必须提供帮助与使用说明 | CLI 可生成帮助信息，工程文档可解释命令、边界与架构 |
 | FR-09 | 系统必须提供非破坏性的设备能力解释 | `inspect --detail` 应能输出设备总线、trim/discard 线索、设备级路径 review 状态和解释文本 |
 
@@ -74,11 +74,11 @@ flowchart TB
 | 编号 | 需求 | 当前落实方式 |
 |---|---|---|
 | NFR-01 | 安全优先 | 默认拒绝危险目录和符号链接，不把文件级覆盖表述为绝对安全 |
-| NFR-02 | 可维护性 | 公共 API、CLI 层和内部引擎分层，私有头限制在 `src/internal/` |
+| NFR-02 | 可维护性 | 公共 API、CLI 层和内部引擎分层，私有头限制在 [src/internal/][src-internal-dir] |
 | NFR-03 | 可移植性 | 使用 C++20、CMake、CLI11，支持 Windows / Linux / macOS 开发流程 |
 | NFR-04 | 可测试性 | 使用 CTest 覆盖 inspect、wipe、wipe-dir 和 CLI 参数回归 |
 | NFR-07 | 保守语义 | 对“未知”“受限”“已支持”必须显式区分，避免把启发式推断写成设备级能力确认 |
-| NFR-05 | 可文档化 | 使用 MkDocs Material 维护 docs-as-code，并通过 `mkdocs build --strict` 校验 |
+| NFR-05 | 可文档化 | 使用 MkDocs Material 维护 docs-as-code，并通过 [mkdocs.yml][mkdocs-yml] 对应的 `mkdocs build --strict` 校验 |
 | NFR-06 | 可重复构建 | 将 CLI11 vendored 到仓库，避免构建过程依赖运行时下载第三方库 |
 
 ## 约束与假设
@@ -102,13 +102,13 @@ flowchart TB
 
 | 需求 | 主要实现落点 | 主要验证方式 |
 |---|---|---|
-| FR-01 / FR-02 | `PathInspector`、`inspect_target`、CLI `inspect` | `tests/test_secure_wipe.cpp` 中 inspect 相关测试 |
-| FR-03 | `FileWiper`、`wipe_file`、CLI `wipe` | 文件擦除测试与 CLI 参数测试 |
-| FR-04 | `DirectoryWiper`、`wipe_directory`、CLI `wipe-dir` | dry-run、确认执行和参数回归测试 |
-| FR-05 | `PathInspector`、CLI 返回码控制 | 危险目录与拒绝路径测试 |
-| FR-09 | `DeviceCapabilityInspector`、`ErasePathAdvisor`、CLI `inspect --detail` | fake probe 测试、advisor 映射测试、详细输出测试 |
-| FR-07 | `include/secure_wipe.h` 与 `src/internal/` 边界 | 代码审查、架构文档与构建检查 |
-| NFR-05 | `docs/`、`mkdocs.yml` | `mkdocs build --strict` |
+| FR-01 / FR-02 | [PathInspector][path-inspector-src]、[inspect_target(...)][secure-wipe-header]、CLI `inspect` | [tests/test_secure_wipe.cpp][test-secure-wipe] 中 inspect 相关测试 |
+| FR-03 | [FileWiper][file-wiper-src]、[wipe_file(...)][secure-wipe-header]、CLI `wipe` | 文件擦除测试与 CLI 参数测试 |
+| FR-04 | [DirectoryWiper][directory-wiper-src]、[wipe_directory(...)][secure-wipe-header]、CLI `wipe-dir` | dry-run、确认执行和参数回归测试 |
+| FR-05 | [PathInspector][path-inspector-src]、CLI 返回码控制 | 危险目录与拒绝路径测试 |
+| FR-09 | [DeviceCapabilityInspector][device-capability-inspector-src]、[ErasePathAdvisor][erase-path-advisor-src]、CLI `inspect --detail` | fake probe 测试、advisor 映射测试、详细输出测试 |
+| FR-07 | [include/secure_wipe.h][secure-wipe-header] 与 [src/internal/][src-internal-dir] 边界 | 代码审查、架构文档与构建检查 |
+| NFR-05 | [docs/][docs-dir]、[mkdocs.yml][mkdocs-yml] | `mkdocs build --strict` |
 
 ## 后续扩展入口
 
@@ -117,3 +117,14 @@ flowchart TB
 1. 先补充新的功能/非功能需求与风险说明。
 2. 再更新系统架构视图与扩展点。
 3. 最后再落代码与测试。
+
+[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
+[src-internal-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/src/internal
+[mkdocs-yml]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/mkdocs.yml
+[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
+[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
+[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
+[device-capability-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/device_capability_inspector.cpp
+[erase-path-advisor-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/erase_path_advisor.cpp
+[test-secure-wipe]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/tests/test_secure_wipe.cpp
+[docs-dir]: https://github.com/shushu-cell/SecureWipe-Cpp/tree/main/docs

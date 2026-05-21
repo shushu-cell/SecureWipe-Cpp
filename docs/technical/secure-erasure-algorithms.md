@@ -173,41 +173,41 @@ flowchart TD
 
 | 算法职责 | 公共入口 | 主要实现位置 | 说明 |
 |---|---|---|---|
-| 路径检查与 recommendation | `inspect_target(...)` | `src/path_inspector.cpp` | 生成 `InspectionReport`，是所有破坏性操作前的安全入口。 |
-| 设备能力探测 | `inspect_target(...)` | `src/device_capability_inspector.cpp` | 通过只读平台探测补入 `DeviceCapabilities`。 |
-| 擦除路径解释 | `inspect_target(...)` | `src/erase_path_advisor.cpp` | 基于 recommendation 与能力快照生成 `ErasePathAdvice`。 |
-| 单文件擦除 | `wipe_file(...)` | `src/file_wiper.cpp` + `src/native_file.cpp` | 负责覆盖、刷新、截断、改名和删除。 |
-| 目录擦除 | `wipe_directory(...)` | `src/directory_wiper.cpp` | 负责扫描、dry-run、聚合和目录清理。 |
-| 公共 API 到内部引擎的转发 | `include/secure_wipe.h` + `src/secure_wipe.cpp` | `src/secure_wipe.cpp` | 通过 facade 组合内部对象，而不是把算法细节暴露到公共头文件。 |
+| 路径检查与 recommendation | [inspect_target(...)][secure-wipe-header] | [src/path_inspector.cpp][path-inspector-src] | 生成 [InspectionReport][secure-wipe-header]，是所有破坏性操作前的安全入口。 |
+| 设备能力探测 | [inspect_target(...)][secure-wipe-header] | [src/device_capability_inspector.cpp][device-capability-inspector-src] | 通过只读平台探测补入 [DeviceCapabilities][secure-wipe-header]。 |
+| 擦除路径解释 | [inspect_target(...)][secure-wipe-header] | [src/erase_path_advisor.cpp][erase-path-advisor-src] | 基于 recommendation 与能力快照生成 [ErasePathAdvice][secure-wipe-header]。 |
+| 单文件擦除 | [wipe_file(...)][secure-wipe-header] | [src/file_wiper.cpp][file-wiper-src] + [src/native_file.cpp][native-file-src] | 负责覆盖、刷新、截断、改名和删除。 |
+| 目录擦除 | [wipe_directory(...)][secure-wipe-header] | [src/directory_wiper.cpp][directory-wiper-src] | 负责扫描、dry-run、聚合和目录清理。 |
+| 公共 API 到内部引擎的转发 | [include/secure_wipe.h][secure-wipe-header] + [src/secure_wipe.cpp][secure-wipe-src] | [src/secure_wipe.cpp][secure-wipe-src] | 通过 facade 组合内部对象，而不是把算法细节暴露到公共头文件。 |
 
 ### 关键函数级关联
 
 | 源文件 | 关键函数 / 对象 | 与算法的关系 |
 |---|---|---|
-| `src/path_inspector.cpp` | `PathInspector::inspect` | 组合目标类型判断、危险路径判定、warning 生成与 recommendation 推导。 |
-| `src/path_inspector.cpp` | `PathInspector::detect_storage_kind` | 负责给出 HDD/SSD/可移动盘/网络盘等粗粒度介质线索。 |
-| `src/path_inspector.cpp` | `PathInspector::is_dangerous_directory` | 保护根目录、主目录和系统目录等高风险路径。 |
-| `src/device_capability_inspector.cpp` | `SystemDeviceCapabilityProbe::probe` / `DeviceCapabilityInspector::inspect` | 负责只读设备探测、bus kind 推断、trim/discard 线索读取和能力状态映射。 |
-| `src/erase_path_advisor.cpp` | `ErasePathAdvisor::advise` | 负责把粗粒度 recommendation 提升为更细粒度的路径建议与理由文本。 |
-| `src/file_wiper.cpp` | `FileWiper::wipe` | 实现单文件主流程：检查、覆盖、刷新、截断、删除。 |
-| `src/file_wiper.cpp` | `FileWiper::fill_buffer` | 具体生成零填充或随机填充块。 |
-| `src/file_wiper.cpp` | `FileWiper::obscure_name_best_effort` | 尝试用占位文件名替换原有文件名。 |
-| `src/native_file.cpp` | `NativeFile::write` / `flush` / `close` | 负责底层文件句柄写入、刷新与关闭。 |
-| `src/directory_wiper.cpp` | `DirectoryWiper::scan` | 递归枚举普通文件并跳过符号链接。 |
-| `src/directory_wiper.cpp` | `DirectoryWiper::wipe` | 负责 dry-run、安全闸门和批量聚合结果。 |
-| `src/cli_application.cpp` | `CommandLineApplication::run_*` | 将算法能力暴露给 CLI，并把 recommendation/warning 呈现给用户。 |
+| [src/path_inspector.cpp][path-inspector-src] | [PathInspector::inspect][path-inspector-src] | 组合目标类型判断、危险路径判定、warning 生成与 recommendation 推导。 |
+| [src/path_inspector.cpp][path-inspector-src] | [PathInspector::detect_storage_kind][path-inspector-src] | 负责给出 HDD/SSD/可移动盘/网络盘等粗粒度介质线索。 |
+| [src/path_inspector.cpp][path-inspector-src] | [PathInspector::is_dangerous_directory][path-inspector-src] | 保护根目录、主目录和系统目录等高风险路径。 |
+| [src/device_capability_inspector.cpp][device-capability-inspector-src] | [SystemDeviceCapabilityProbe::probe][device-capability-inspector-src] / [DeviceCapabilityInspector::inspect][device-capability-inspector-src] | 负责只读设备探测、bus kind 推断、trim/discard 线索读取和能力状态映射。 |
+| [src/erase_path_advisor.cpp][erase-path-advisor-src] | [ErasePathAdvisor::advise][erase-path-advisor-src] | 负责把粗粒度 recommendation 提升为更细粒度的路径建议与理由文本。 |
+| [src/file_wiper.cpp][file-wiper-src] | [FileWiper::wipe][file-wiper-src] | 实现单文件主流程：检查、覆盖、刷新、截断、删除。 |
+| [src/file_wiper.cpp][file-wiper-src] | [FileWiper::fill_buffer][file-wiper-src] | 具体生成零填充或随机填充块。 |
+| [src/file_wiper.cpp][file-wiper-src] | [FileWiper::obscure_name_best_effort][file-wiper-src] | 尝试用占位文件名替换原有文件名。 |
+| [src/native_file.cpp][native-file-src] | [NativeFile::write][native-file-src] / [flush][native-file-src] / [close][native-file-src] | 负责底层文件句柄写入、刷新与关闭。 |
+| [src/directory_wiper.cpp][directory-wiper-src] | [DirectoryWiper::scan][directory-wiper-src] | 递归枚举普通文件并跳过符号链接。 |
+| [src/directory_wiper.cpp][directory-wiper-src] | [DirectoryWiper::wipe][directory-wiper-src] | 负责 dry-run、安全闸门和批量聚合结果。 |
+| [src/cli_application.cpp][cli-application-src] | [CommandLineApplication::run_*][cli-application-src] | 将算法能力暴露给 CLI，并把 recommendation/warning 呈现给用户。 |
 
 ### 代码结构如何支撑算法维护
 
 当前实现把算法拆到了多个单一职责翻译单元里：
 
-- `PathInspector` 只负责“先判断能不能做、应该怎么提示”。
-- `FileWiper` 只负责“如何对一个普通文件执行 best-effort 擦除”。
-- `DirectoryWiper` 只负责“如何安全地把单文件算法扩展到目录树”。
-- `NativeFile` 负责跨平台底层句柄操作细节。
-- `src/secure_wipe.cpp` 和 `include/secure_wipe.h` 负责稳定公共边界。
+- [PathInspector][path-inspector-src] 只负责“先判断能不能做、应该怎么提示”。
+- [FileWiper][file-wiper-src] 只负责“如何对一个普通文件执行 best-effort 擦除”。
+- [DirectoryWiper][directory-wiper-src] 只负责“如何安全地把单文件算法扩展到目录树”。
+- [NativeFile][native-file-src] 负责跨平台底层句柄操作细节。
+- [src/secure_wipe.cpp][secure-wipe-src] 和 [include/secure_wipe.h][secure-wipe-header] 负责稳定公共边界。
 
-这种拆分的直接好处是：未来若引入设备级 sanitization，可以新增独立对象和独立代码路径，而不必把平台命令与设备分支强行塞进 `FileWiper`。
+这种拆分的直接好处是：未来若引入设备级 sanitization，可以新增独立对象和独立代码路径，而不必把平台命令与设备分支强行塞进 [FileWiper][file-wiper-src]。
 
 ## 算法评估
 
@@ -232,7 +232,7 @@ flowchart TD
 
 - 算法复杂度适中，利于测试和代码审查
 - `Zeros` / `Random` / `passes` 已能覆盖当前 CLI/API 需要的最小策略面
-- 通过 `InspectionReport` 和 `WipeResult` 把决策结果显式建模，而不是隐含在控制流里
+- 通过 [InspectionReport][secure-wipe-header] 和 [WipeResult][secure-wipe-header] 把决策结果显式建模，而不是隐含在控制流里
 - CLI、公共 API 和内部引擎边界清晰，便于后续演进
 
 ### 未来演进评估
@@ -254,13 +254,24 @@ flowchart TD
 6. Michael Wei, Laura M. Grupp, Frederick E. Spada, Steven Swanson. Reliability of Erasing Data From Flash-Based Solid State Drives. FAST 2011.
 7. Heechan Kim, Seongjun Ahn, Sang Lyul Min. Secure File Deletion for Solid State Drives. 2016.
 8. Holepunch: Fast, Secure File Deletion with Crash Consistency. 2024.
-9. 仓库内 `refs/deep-research-report.md` 深度研究报告，用于汇总标准、研究论文与产品调研背景。
+9. 仓库内 [refs/deep-research-report.md][deep-research-report] 深度研究报告，用于汇总标准、研究论文与产品调研背景。
 
 ## 维护要求
 
 当以下内容发生变化时，本页必须同步更新：
 
-- `Pattern`、`WipeOptions`、`InspectionReport` 或 `WipeResult` 的公共语义变化
-- `src/path_inspector.cpp`、`src/file_wiper.cpp`、`src/directory_wiper.cpp` 中的主流程变化
+- [Pattern][secure-wipe-header]、[WipeOptions][secure-wipe-header]、[InspectionReport][secure-wipe-header] 或 [WipeResult][secure-wipe-header] 的公共语义变化
+- [src/path_inspector.cpp][path-inspector-src]、[src/file_wiper.cpp][file-wiper-src]、[src/directory_wiper.cpp][directory-wiper-src] 中的主流程变化
 - 新增设备级 sanitization、报告系统或新的 recommendation 语义
 - 安全边界或 CLI 帮助文本发生实质变化
+
+[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
+[secure-wipe-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/secure_wipe.cpp
+[path-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/path_inspector.cpp
+[device-capability-inspector-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/device_capability_inspector.cpp
+[erase-path-advisor-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/erase_path_advisor.cpp
+[file-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/file_wiper.cpp
+[native-file-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/native_file.cpp
+[directory-wiper-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/directory_wiper.cpp
+[cli-application-src]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/src/cli_application.cpp
+[deep-research-report]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/refs/deep-research-report.md

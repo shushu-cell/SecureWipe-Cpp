@@ -157,6 +157,8 @@ WipeResult wipe_directory(std::string_view dir, const WipeOptions& opt, bool dry
 
 当前项目约定是：
 
-- `include/secure_wipe.h` 是稳定公共边界
+- [include/secure_wipe.h][secure-wipe-header] 是稳定公共边界
 - 内部引擎头文件不属于对外 API，不保证兼容性
 - 当顶层行为变化时，应同步更新本页和 CLI 文档
+
+[secure-wipe-header]: https://github.com/shushu-cell/SecureWipe-Cpp/blob/main/include/secure_wipe.h
